@@ -169,6 +169,40 @@ if (!master.includes('prefers-color-scheme') || !/zero occurrences|no occurrence
   fails.push(`${MASTER} does not record the prefers-color-scheme zero occurrences decision`);
 }
 
+// 30 — the agent guide exists
+const guide = read('AGENT_GUIDE.md');
+if (!guide) fails.push('AGENT_GUIDE.md is missing');
+
+// 31 — it teaches how to explore the site
+if (!guide.includes('How to explore the site')) {
+  fails.push('AGENT_GUIDE.md has no "How to explore the site" section');
+}
+
+// 32 — it names the interaction query and the press motion
+if (!guide.includes('hover:hover') || !guide.includes('translateY(1px)')) {
+  fails.push('AGENT_GUIDE.md is missing hover:hover and/or translateY(1px)');
+}
+
+// 33 — it records the dead --sand token
+if (!guide.includes('--sand') || !(/dead token/i.test(guide) || /unused/i.test(guide))) {
+  fails.push('AGENT_GUIDE.md does not record --sand as a dead/unused token');
+}
+
+// 34 — it records the zero-form-fields decision
+if (!/zero real form fields|zero form fields/i.test(guide)) {
+  fails.push('AGENT_GUIDE.md does not record the zero real form fields decision');
+}
+
+// 35 — it names both gates
+if (!guide.includes('verify_docs.mjs') || !guide.includes('verify_render.mjs')) {
+  fails.push('AGENT_GUIDE.md does not name both verification gates');
+}
+
+// 36 — README points at the guide
+if (!read('README.md').includes('AGENT_GUIDE.md')) {
+  fails.push('README.md does not link AGENT_GUIDE.md');
+}
+
 if (fails.length) {
   console.log(`GATE_FAIL: ${fails.length} check(s) failed`);
   for (const f of fails) console.log(`  - ${f}`);

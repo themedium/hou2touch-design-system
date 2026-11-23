@@ -7,6 +7,12 @@ that belongs to the same visual universe.
 
 **Start here → [MASTER_DESIGN_SYSTEM.md](MASTER_DESIGN_SYSTEM.md)**
 
+**Working with the system (any AI agent) → read [AGENT_GUIDE.md](AGENT_GUIDE.md)
+before you produce anything.** It is the field guide: where the truth lives,
+how to read the site's Russian decision comments, the "feel" checklist, the
+known traps you must not "fix", and the two gates to run before you claim
+work is done.
+
 ## What is in here
 
 | Folder | Contents |
