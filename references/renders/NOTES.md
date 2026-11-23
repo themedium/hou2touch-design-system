@@ -430,3 +430,40 @@ a band overall (rows 0–3 pure paper, last three rows ≥ 75 % ink, band averag
 - `s = 0` is the static state required by §12 for print and video. The live site
   drives `s` from scroll in 32 quantised steps; that motion cannot be shown on a
   static poster.
+
+## Comparison against the live site (2026-11-23)
+
+**Method.** Live Chrome at `127.0.0.1:8898`, screenshots at a **1377 px** viewport; the seam
+canvas was read **pixel-by-pixel** via `getImageData`.
+
+### Seam: exact match
+
+The live seam canvas is **173 × 12** at CSS **96 px** — i.e. **12 rows × 8 px**, and
+`cols = ceil(1377 / 8) = 173`. Solving `s` in **1/32 steps** gave an **exact match of all 12
+rows at `s = 2/32`**, error **0**.
+
+| row | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| live (`s = 2/32`) | 0.0 % | 0.0 % | 0.0 % | 0.0 % | 50.3 % | 24.9 % | 50.3 % | 49.7 % | 100.0 % | 75.1 % | 100.0 % | 100.0 % |
+| this render (`s = 0`) | 0.0 % | 0.0 % | 0.0 % | 0.0 % | 50.4 % | 12.1 % | 50.4 % | 49.6 % | 75.8 % | 49.6 % | 100.0 % | 87.9 % |
+
+The live band was captured mid-scroll, at `s = 2/32`; this render is the **static** state
+`s = 0` required by §12 for print and video. Same rule, same matrix, same geometry — the ramp
+position differs only because the live state is scroll-driven.
+
+### Field: did not match in character
+
+The site's hero is a **halftoned photograph** (`HERO_TEX = IMG("hero_school")`); these renders use
+the **procedural motifs**. Technically compliant, aesthetically different: a **printed
+photograph** versus a **vector diagram**.
+
+### Missing device found
+
+The seam carries **type**, inverted across the boundary with `mix-blend-mode:difference` — a
+device that was **not** documented until this comparison. It is now specified in
+`MASTER_DESIGN_SYSTEM.md` §12.11 and §12.12.
+
+### Conclusion
+
+The seam rule is **VERIFIED** against the live site (exact row-for-row match). The field renders
+are a faithful implementation of the **motif path** but **not** a reproduction of the site's hero.

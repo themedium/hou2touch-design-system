@@ -473,6 +473,111 @@ On course pages the seam also ships as an **inline base64 8×24 PNG**, tiled wit
 - **3D / Blender:** the seam is a **texture, not geometry** — a plane or shader mask carrying the
   baked Bayer ramp, never a modelled jagged edge.
 
+### 12.11 Text across the seam — the difference inversion
+
+> **A line of display type may sit ON the seam. It inverts itself across the boundary with one
+> declaration, and the seam dither is allowed to cut through the glyphs.**
+
+The seam is not only a boundary — it is a **carrier**. A line of display type is placed exactly
+on the seam and reads correctly on both sides of it, because the glyphs are painted in the
+*difference* between the seam and whatever is behind them.
+
+The CSS contract, verbatim (`en/index.html`):
+
+```css
+.seam{display:block;position:relative;height:0;pointer-events:none}
+.seam p{position:absolute;z-index:3;left:0;right:0;top:0;
+        transform:translateY(calc(-50% - 58px));
+        padding-top:.06em;text-align:center;
+        font:700 var(--sf,min(9.2vw,180px))/.86 var(--disp);
+        text-transform:uppercase;letter-spacing:.005em;white-space:nowrap;
+        color:var(--fg);mix-blend-mode:difference}
+```
+
+Measured live on `en/index.html` at a **1377 px** viewport:
+
+| Property | Measured value | Where it comes from |
+|---|---|---|
+| `font-size` | **133 px** | `--sf: 133px`, set inline on the element (`min(9.2vw,180px)` is the fallback) |
+| `line-height` | **114.38 px** | `.86` of the font size |
+| `letter-spacing` | **0.665 px** | `.005em` |
+| `font-weight` | **700** | the `700` in the `font` shorthand |
+| `text-transform` | **uppercase** | — |
+| `font-family` | `"H2T Bebas", …` | `--disp` |
+| `color` | `rgb(239,238,233)` = `#efeee9` | `--fg` |
+| `mix-blend-mode` | **difference** | the inversion itself |
+
+The arithmetic — why one line reads correctly on both fields:
+
+| Background | `#efeee9` difference | Result |
+|---|---|---|
+| paper `#e9e7e0` | \|239−233\|, \|238−231\|, \|233−224\| = (6, 7, 9) | `#060709` — near-black |
+| dark `#0b0b0c` | (228, 227, 221) | `#e4e3dd` — near-cream |
+
+So the **same** line is near-black on paper and near-cream on dark: one declaration, **no
+duplication and no split styling**. The seam's dither is then allowed to cut through the glyphs,
+which is what produces the characteristic **eroded** letterforms.
+
+**The zero-height marker.** The `.seam` div is a **zero-height marker** placed exactly on the
+boundary (`position:relative; height:0`); the text is absolutely positioned and translated up by
+`calc(-50% - 58px)` so that it straddles the seam. Nothing about the layout depends on the height
+of the text.
+
+Markup, verbatim:
+
+```html
+<div class="seam" aria-hidden="true"><p id="seamT" style="--sf: 133px;">One network — any medium</p></div>
+```
+
+The text is **`aria-hidden="true"`** — it is **decorative, not content**. The section heading
+carries the real accessible name; the seam line must never be the only carrier of the message.
+
+Mobile:
+
+```css
+@media (max-width:600px){
+  .seam p{font-size:var(--sf,64px);white-space:normal;text-wrap-style:balance;
+          padding-inline:var(--pad);transform:translateY(calc(-50% - 24px))}
+  .seam p.two{line-height:1.3;transform:translateY(calc(-1.26em - 16px))}
+}
+```
+
+**Rule.** The seam text is ALWAYS a **single line** at desktop (`white-space:nowrap`); below
+600 px it wraps with `text-wrap-style:balance`, which keeps the wrapped lines even. It is set in
+the display face at full weight, uppercase — and it carries **no shadow** unless the
+`x-seamfull` exception applies (§12.12).
+
+### 12.12 The legibility exception — `x-seamfull`
+
+`difference` **erodes** the glyphs, because the seam's pixels cut into them. When the seam line
+must stay **fully legible** and must **not** be eroded, the site switches to a halo instead of an
+inversion:
+
+```css
+.x-seamfull .seam p{mix-blend-mode:normal;color:var(--fg);
+  text-shadow: 3.0px 0.0px 0 var(--ink),2.8px 1.1px 0 var(--ink), … 16 layers … ,-0.0px -3.0px 0 var(--ink)}
+.x-seamfull .seam p.s-ink{color:var(--ink);text-shadow: … var(--paper) …}
+```
+
+The source comment says exactly what the device is for:
+
+> «орель цвета фона: пиксели края не режут буквы»
+
+— a **halo in the colour of the background** (16 `text-shadow` layers), so the seam's edge pixels
+do not cut the letters.
+
+Two variants:
+
+| Class | Text | Halo |
+|---|---|---|
+| `.x-seamfull .seam p` (default) | cream `--fg` | ink `--ink` |
+| `.x-seamfull .seam p.s-ink` | ink `--ink` | paper `--paper` |
+
+**Rule.** Use `mix-blend-mode:difference` when the **erosion is the point** (§12.11); use
+`x-seamfull` when **legibility must win** (§12.12). **Never** hand-place two coloured copies of
+the same text — one dark and one light, stacked — to fake the inversion: that is the failure mode
+this device exists to prevent.
+
 ---
 
 ## 13. Plate policy
@@ -771,6 +876,28 @@ photographic**:
 - applying `mix-blend-mode` to photography;
 - introducing avif;
 - cropping, recolouring or processing a photo outside the halftone pipeline.
+
+---
+
+### 14.8 The hero is a photograph; the motifs are procedural
+
+The site's hero field is **not** one of the 29 procedural motifs. The hero shader samples a
+**photograph**:
+
+```glsl
+HERO_TEX = IMG("hero_school")
+```
+
+(`img/hero_school.webp`; the hero canvas `#gl` is sized to the viewport — **1377 × 739** at a
+1377 px viewport.) That is why the hero reads as a **printed photograph** rather than as a vector
+diagram. The 29 procedural motifs in `generative/` serve **section headers and cards** — not the
+hero.
+
+**Rule.** A new medium must **declare which of the two it is using**: the **motif path**
+(procedural, `generative/`) or the **photograph path** (halftoned image, this section). Both
+paths cross a dark↔light junction through the same seam — see **§12** — but they are not
+interchangeable: a motif substituted for a photograph loses the printed-photograph character of
+the site.
 
 ---
 

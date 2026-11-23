@@ -203,6 +203,37 @@ if (!read('README.md').includes('AGENT_GUIDE.md')) {
   fails.push('README.md does not link AGENT_GUIDE.md');
 }
 
+// 37 — the seam text inversion device (§12.11)
+if (!/mix-blend-mode:\s*difference/.test(master)) {
+  fails.push(`${MASTER} does not document the seam text inversion (mix-blend-mode:difference)`);
+}
+
+// 38 — the inversion arithmetic (§12.11)
+for (const hex of ['#060709', '#e4e3dd']) {
+  if (!master.includes(hex)) fails.push(`${MASTER} is missing the inversion result ${hex}`);
+}
+
+// 39 — the legibility exception (§12.12)
+if (!master.includes('x-seamfull')) {
+  fails.push(`${MASTER} does not document the x-seamfull legibility exception`);
+}
+
+// 40 — the hero is a photograph (§14.8)
+if (!master.includes('HERO_TEX')) {
+  fails.push(`${MASTER} does not record HERO_TEX (the hero samples a photograph, not a motif)`);
+}
+
+// 41 — the "start with the hero" lesson in the agent guide
+if (!guide.includes('HERO_TEX') || !/halftoned photograph/.test(guide)) {
+  fails.push('AGENT_GUIDE.md does not record the "start with the hero" lesson (HERO_TEX / halftoned photograph)');
+}
+
+// 42 — the live-site comparison notes
+const notes = read('references/renders/NOTES.md');
+if (!notes.includes('s = 2/32') || !/exact match/i.test(notes)) {
+  fails.push('references/renders/NOTES.md does not record the live comparison (s = 2/32 / exact match)');
+}
+
 if (fails.length) {
   console.log(`GATE_FAIL: ${fails.length} check(s) failed`);
   for (const f of fails) console.log(`  - ${f}`);

@@ -59,7 +59,35 @@ Work through these in order. Do not skip to the generative folder.
 | `design-system/` | This repo — the extracted canon. |
 | `src/template.html` | The site template (the source the 33 pages are built from). Still carries one known legacy value — see §5. |
 
-### 3.2 Read the comments first, not the rules
+### 3.2 Start with the hero — what does it sample?
+
+The single highest-value question when arriving at this site is: **what texture does the hero
+shader read?**
+
+```bash
+grep -n 'HERO_TEX' en/index.html
+# → HERO_TEX = IMG("hero_school")
+```
+
+The answer changes everything: the hero is a **halftoned photograph**
+(`img/hero_school.webp`), **not** a procedural motif. An agent that assumes "generative field"
+will produce a vector-looking result and miss the site's printed-photograph feel entirely.
+
+> **This was a real failure.** Renders produced from the docs alone used procedural motifs and
+> did not match the site's character — because the docs describe the 29 motifs, while the hero
+> uses a photograph. See `references/renders/NOTES.md` → *Comparison against the live site*.
+
+**The second lesson.** The seam carries **type**: `mix-blend-mode:difference` inverts a line of
+display type across the boundary. The seam is not only a boundary — it is a carrier.
+
+```bash
+grep -n 'mix-blend-mode' en/index.html
+# → three uses; one of them is the seam text
+```
+
+Read all three before deciding how a surface crosses a dark↔light junction.
+
+### 3.3 Read the comments first, not the rules
 
 **The site's own comments are in Russian and they are the single most
 informative artefact in the project.** They record decisions, dates and
@@ -95,7 +123,7 @@ Representative comments, verbatim:
   SOP, Extreme I и II → CHOP, GLSL → TOP; route1 — DAT; теги Houdini → SOP,
   TouchDesigner → TOP; "песок" не используется.»
 
-### 3.3 Trace a component through its four layers
+### 3.4 Trace a component through its four layers
 
 To understand any component, walk it in **this order**. Skipping a layer is
 how you end up with something that satisfies the checklist but behaves wrong.
@@ -121,7 +149,7 @@ Two things that example teaches and that no rule table would:
 * family colour is set **per instance** via `--c`, so the same panel can be
   SOP, CHOP or TOP without new CSS.
 
-### 3.4 Look for what is NOT there
+### 3.5 Look for what is NOT there
 
 Absence is a decision. Before you add a component, check whether the system
 deliberately omitted it.
@@ -137,14 +165,14 @@ The site currently has:
 If a task requires a form or a modal, that is a **new design decision**, not a
 reusable pattern. Say so, do not quietly invent one.
 
-### 3.5 Measure, don't guess
+### 3.6 Measure, don't guess
 
 Every value in these docs came from a `file:line` in the source. If you need a
 number — a radius, a duration, a gap, a contrast ratio — **find it in the
 source**. Do not invent a plausible one. A number with a citation is usable by
 the next agent; a plausible number is a rumour.
 
-### 3.6 The places where the "feel" is implemented
+### 3.7 The places where the "feel" is implemented
 
 | What | Where | Note |
 |---|---|---|
