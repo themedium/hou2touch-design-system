@@ -149,6 +149,26 @@ function parseHex(h) {
 }
 
 // ---------------------------------------------------------------- main
+// The 8x8 Bayer matrix, rebuilt from scratch (the canonical recursion
+//   M' = [[4M, 4M+2], [4M+3, 4M+1]]  from  [[0]]
+// three times).  This is deliberately NOT imported from render.py — the seam
+// gate recomputes the matrix and the whole ramp on its own.
+function bayer8() {
+  let M = [[0]];
+  for (let k = 0; k < 3; k++) {
+    const n = M.length, N = [];
+    for (let i = 0; i < 2 * n; i++) {
+      N.push([]);
+      for (let j = 0; j < 2 * n; j++) {
+        N[i][j] = M[i % n][j % n] * 4 + [[0, 2], [3, 1]][Math.floor(i / n)][Math.floor(j / n)];
+      }
+    }
+    M = N;
+  }
+  return M.flat(); // row-major, values 0..63
+}
+const B8 = bayer8();
+
 const manifestPath = path.join(HERE, "render_manifest.json");
 if (!fs.existsSync(manifestPath)) {
   console.log("GATE_FAIL: render_manifest.json not found");
@@ -427,6 +447,122 @@ for (const out of manifest.outputs) {
       if (headRect && r.h > headRect.h)
         fail(`${label}: display rect "${r.text}" (h=${r.h}) is taller than the headline (h=${headRect.h})`);
     }
+  }
+
+  // ---- seam gates: only for the composition that declares a seam ---------
+  const seam = out.seam;
+  if (seam) {
+    const cell = seam.cell;             // render cells per seam cell
+    const rows = seam.rows;
+    const bandH = seam.band_height;      // output px
+    const yTop = seam.y_top;             // output px
+    const x0 = seam.x0;                  // output px, left edge of the band
+
+    // --- 1. band geometry -------------------------------------------------
+    if (rows !== 12) fail(`${label}: seam rows ${rows} (must be 12)`);
+    if (bandH !== rows * cell * up)
+      fail(`${label}: seam band_height ${bandH} != rows*cell*upscale (${rows * cell * up})`);
+    if (yTop % up !== 0 || x0 % up !== 0)
+      fail(`${label}: seam band is not cell-aligned (y_top ${yTop}, x0 ${x0})`);
+    const cellPx = cell * up;
+    const mmExact = (cellPx / 300) * 25.4;
+    // this poster uses the PROPORTIONAL scale: the seam keeps its on-screen
+    // weight (~10.7% of height) rather than true size (8 px = 0.675 mm, which
+    // would make the band a 8.13 mm hairline).  Assert the proportion instead.
+    if (seam.scale_used !== "proportional")
+      fail(`${label}: seam scale_used ${seam.scale_used} (this poster must use the proportional scale)`);
+    const bandPct = (bandH / img.height) * 100;
+    if (bandPct < 8 || bandPct > 13)
+      fail(`${label}: seam band is ${bandPct.toFixed(2)}% of page height (proportional target 8-13%)`);
+    if (seam.x0 !== 0 || seam.width !== img.width)
+      fail(`${label}: seam band is not full width (x0 ${seam.x0}, width ${seam.width} of ${img.width})`);
+    console.log(`   seam geometry: cell ${cell} render cells = ${cellPx} px = ${mmExact.toFixed(3)} mm (proportional), rows ${rows}, band ${bandH} px = ${bandPct.toFixed(2)}% of page (${(bandH / 300 * 25.4).toFixed(2)} mm), y_top ${yTop}, full width`);
+
+    // --- the band's pixel height in the OUTPUT ----------------------------
+    // The row above the band is pure paper, the row below it is the solid
+    // dark region: the band is exactly bandH pixels tall.
+    {
+      const rowIs = (y, want) => {
+        if (y < 0 || y >= img.height) return false;
+        for (let x = x0; x < img.width; x++) {
+          const i = (y * img.width + x) * 3;
+          const key = `${img.rgb[i]},${img.rgb[i + 1]},${img.rgb[i + 2]}`;
+          if (want === "paper" && key !== paper.join(",")) return false;
+          if (want === "ink" && key !== ink.join(",")) return false;
+        }
+        return true;
+      };
+      const above = rowIs(yTop - 1, "paper");
+      const below = rowIs(yTop + bandH, "ink");
+      console.log(`   band edges: row ${yTop - 1} all paper ${above}, row ${yTop + bandH} all ink ${below} -> measured band height ${bandH} px`);
+      if (!above) fail(`${label}: the row above the seam band is not pure paper`);
+      if (!below) fail(`${label}: the row below the seam band is not solid ink — the band is not exactly ${bandH} px tall`);
+      // no accent inside the band
+      let accentInBand = 0;
+      for (let y = yTop; y < yTop + bandH; y++)
+        for (let x = x0; x < img.width; x++) {
+          const i = (y * img.width + x) * 3;
+          if (`${img.rgb[i]},${img.rgb[i + 1]},${img.rgb[i + 2]}` === accentKey) accentInBand++;
+        }
+      if (accentInBand > 0) fail(`${label}: ${accentInBand} accent pixels inside the seam band`);
+    }
+
+    // --- 2. Bayer fidelity: rebuild the LIVE rule from scratch ------------
+    // The live rule is applied verbatim and unquantised:
+    //     ink if t > B8[(r % 8) * 8 + (i % 8)]
+    // Its realised density is NOT a ramp (the eight Bayer rows have different
+    // histograms).  We assert exact agreement with the live rule, not with a
+    // monotone ideal — a monotone gate would test a rule the site never ran.
+    const bandTopCell = yTop / up;
+    const x0Cell = x0 / up;
+    const rowFrac = [];
+    const rowExpected = [];
+    let mismatches = 0, firstMismatch = null;
+    for (let r = 0; r < rows; r++) {
+      const v = (r + 0.5) / rows;
+      const t = Math.min(Math.max(v * 1.3 - 0.3 + (seam.scroll_offset_s ?? 0), 0), 1) * 64;
+      let ink = 0, total = 0, expInk = 0;
+      for (let rr = r * cell; rr < (r + 1) * cell; rr++) {
+        const cy = bandTopCell + rr;
+        for (let cx = x0Cell; cx < cw; cx++) {
+          const ci = Math.floor((cx - x0Cell) / cell);
+          const b = B8[(r % 8) * 8 + (ci % 8)];
+          const expected = t > b;                  // the live rule, verbatim
+          const actual = cls[cy * cw + cx] !== 0;
+          total++;
+          if (expected) expInk++;
+          if (actual) ink++;
+          if (expected !== actual) {
+            mismatches++;
+            if (!firstMismatch) firstMismatch = `cell ${cx},${cy} (row ${r})`;
+          }
+        }
+      }
+      rowFrac.push(ink / total);
+      rowExpected.push(expInk / total);
+    }
+    console.log(`   seam Bayer: ${mismatches} mismatching cells of ${rows * cell * (cw - x0Cell)} (live rule, verbatim, unquantised)`);
+    for (let r = 0; r < rows; r++)
+      console.log(`     row ${String(r).padStart(2)}: expected ${(rowExpected[r] * 100).toFixed(1)}%  measured ${(rowFrac[r] * 100).toFixed(1)}%`);
+    if (mismatches > 0)
+      fail(`${label}: ${mismatches} seam cells do not match the live Bayer rule (first: ${firstMismatch})`);
+
+    // --- 3. the band is a band, not noise ---------------------------------
+    // The live rule is non-monotone by construction, but it must still ramp
+    // from paper to near-ink overall: the first quarter is pure paper and the
+    // last quarter is mostly ink.  This catches a broken matrix or a flipped
+    // direction without demanding a ramp the site does not have.
+    const firstQuarter = rowFrac.slice(0, 3);
+    if (firstQuarter.some((f) => f > 1e-9))
+      fail(`${label}: seam rows 0..2 must be pure paper (got ${firstQuarter.map((f) => (f * 100).toFixed(1) + '%').join(', ')})`);
+    const lastQuarter = rowFrac.slice(rows - 3);
+    const lastAvg = lastQuarter.reduce((a, b) => a + b, 0) / lastQuarter.length;
+    if (lastAvg < 0.75)
+      fail(`${label}: seam last three rows average ${(lastAvg * 100).toFixed(1)}% ink (must be >= 75%)`);
+    const bandAvg = rowFrac.reduce((a, b) => a + b, 0) / rows;
+    if (bandAvg < 0.35 || bandAvg > 0.65)
+      fail(`${label}: seam band averages ${(bandAvg * 100).toFixed(1)}% ink (must be 35-65%: a band, not a slab or a void)`);
+    console.log(`   seam ramp: rows 0-2 pure paper, last three avg ${(lastAvg * 100).toFixed(1)}%, band avg ${(bandAvg * 100).toFixed(1)}% (non-monotone by construction)`);
   }
 
   // ---- gate 4: nearest-neighbour proof ----------------------------------

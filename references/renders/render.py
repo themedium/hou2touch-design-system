@@ -61,6 +61,7 @@ FAMILY = {
     "sop": (61, 127, 214),    # #3d7fd6
     "chop": (69, 166, 84),    # #45a654
     "top": (101, 163, 13),    # #65a30d
+    "comp": (154, 154, 150),  # #9a9a96 — the neutral family
 }
 
 DISPLAY_LH = 0.8                # the system's M8: lh .8, uppercase, tracking ~0
@@ -463,14 +464,19 @@ def layout_type(spec):
         else:
             path = FONT_PATH[kind]
             track = blk.get("track", 0.0)
-            size = fit_size(blk["text"], path, measure_w, track=track)
+            # a block may be one line ("text") or several ("lines"); the size is
+            # fitted to the LONGEST line so all lines share one optical size
+            lines = blk.get("lines") or [blk["text"]]
+            size = fit_size(max(lines, key=len), path, measure_w, track=track)
             if blk.get("max_size"):
                 size = min(size, int(blk["max_size"]))
             if blk.get("min_size"):
                 size = max(size, int(blk["min_size"]))
-            it = {"text": blk["text"], "kind": kind, "size": size,
-                  "x": col_x, "y": int(blk["y"]), "track": track}
-            items.append(it)
+            lh = blk.get("line_height", 1.35)
+            for i, ln in enumerate(lines):
+                it = {"text": ln, "kind": kind, "size": size,
+                      "x": col_x, "y": int(round(blk["y"] + i * size * lh)), "track": track}
+                items.append(it)
     return items, disp_lines
 
 
@@ -859,6 +865,316 @@ def make_specs():
     return specs
 
 
+# --------------------------------------------------------------------------
+# §12 — THE PIXEL SEAM
+#
+# The seam is the ordered-dither band that joins the paper to the dark region
+# of a section.  Its rule (en/index.html, the "pixel edge" canvas):
+#
+#     cell   = 8 px desktop   (12 rows, 96 px band)
+#     rows   = 12
+#     cols   = ceil(width / cell)
+#     v      = (r + 0.5) / rows
+#     t      = clamp(v*1.3 - 0.3 + s, 0, 1) * 64
+#     ink if t > B8[(r % 8) * 8 + (i % 8)]
+#
+# `s` is the scroll offset; print and video are STATIC, so s = 0 here.
+# B8 is the same recursive 8x8 Bayer matrix the field uses (bayer8() above).
+#
+# The rule is applied VERBATIM and UNQUANTISED.  The realised density of a band
+# row is therefore
+#     #{B8 values in row (r % 8) below t} / 8
+# and the eight Bayer ROWS have different histograms, so that density is NOT a
+# ramp: rows 0..3 are pure paper, row 5 dips to 25%, rows 8/10/11 sit near
+# 87.5%, and the last row is not solid either.  That non-monotonicity is the
+# real behaviour of the live rule and is reproduced exactly, not "repaired".
+# A gate that demands a monotone ramp would be testing a rule the site does
+# not implement.
+#
+# SCALE — two scales are possible for print:
+#
+#   (a) TRUE SIZE — one seam cell = 8 output px = 0.675 mm at 300 dpi (the
+#       system's own print rule, "16 px = 1.35 mm").  The band is then 96 px
+#       = 8.13 mm = 2.7% of an A4 page: the seam reads as a hairline and the
+#       poster stops being about the seam.
+#   (b) PROPORTIONAL — the seam keeps the weight it has on screen: 96 px in a
+#       ~900 px viewport is ~10.7% of the height.  On A4/300 dpi (3508 px)
+#       that is ~375 px; with 12 rows, ~31 px per cell.  Realised here at an
+#       integer 30 px per cell (15 render cells at up = 2):
+#       band = 12 * 30 = 360 px = 10.26% of the page = 30.48 mm.
+#
+# This poster uses (b).  Both are reported in the manifest.
+# --------------------------------------------------------------------------
+SEAM_ROWS = 12            # rows of the seam band
+SEAM_CELL_RENDER = 15     # one seam cell = 15 render cells = 30 output px
+SEAM_SCROLL = 0.0         # static: print and video are static at s = 0
+SEAM_CELL_MM = 0.675      # 8 px at 300 dpi — the system's TRUE-SIZE print rule
+#                          # ("16 px = 1.35 mm at 300 dpi" => 8 px = 0.675 mm)
+
+
+def seam_ramp(rows=SEAM_ROWS, s=SEAM_SCROLL):
+    """The threshold ramp, one value per band row."""
+    out = []
+    for r in range(rows):
+        v = (r + 0.5) / rows
+        out.append(min(max(v * 1.3 - 0.3 + s, 0.0), 1.0) * 64.0)
+    return out
+
+
+def seam_mask(Wc, Hc, x0, band_top, cell, rows=SEAM_ROWS, s=SEAM_SCROLL):
+    """The seam's ink mask at render-cell resolution — the LIVE rule, verbatim.
+
+        v   = (r + 0.5) / rows
+        t   = clamp(v*1.3 - 0.3 + s, 0, 1) * 64
+        ink if t > B8[(r % 8) * 8 + (i % 8)]
+
+    One seam cell is `cell` render cells wide and tall.  No quantisation and no
+    monotonicity repair: the density is whatever the live rule produces.
+    Returns (mask, ink_fraction_per_row); the fraction weights a partial last
+    column by its real width so it matches the rendered pixels exactly.
+    """
+    m = np.zeros((Hc, Wc), dtype=bool)
+    cols = int(np.ceil((Wc - x0) / float(cell)))
+    ts = seam_ramp(rows, s)
+    fracs = []
+    for r in range(rows):
+        t = ts[r]
+        ink_w = 0
+        total_w = 0
+        for i in range(cols):
+            cx0 = x0 + i * cell
+            cx1 = min(cx0 + cell, Wc)
+            w = cx1 - cx0
+            total_w += w
+            if t > int(B8[(r % 8), (i % 8)]):
+                m[band_top + r * cell:band_top + (r + 1) * cell, cx0:cx1] = True
+                ink_w += w
+        fracs.append(ink_w / float(total_w) if total_w else 0.0)
+    return m, fracs
+
+
+def build_seam(spec):
+    """The fourth composition: the pixel seam (§12) as a poster.
+
+    There is no motif here: PAPER above, DARK below, and the seam band between
+    them.  The band is the subject; the type sits in the quiet column.
+    """
+    Wc, Hc = spec["cell_w"], spec["cell_h"]
+    up = spec["upscale"]
+    Wo, Ho = Wc * up, Hc * up
+
+    items, disp_lines = layout_type(spec)
+    tmask, boxes = render_type_mask(Wc, Hc, items)
+    rects = quiet_zones(spec, boxes)
+    # snap the quiet column's right edge UP to a whole seam cell, so the band
+    # ends on a whole cell too (no half-cell at the right edge) and the ramp
+    # fractions are exactly k/8
+    rows, cell = spec["seam_rows"], spec["seam_cell"]
+    band_h = rows * cell
+    band_top = spec["band_top_cell"]
+    dark_top = band_top + band_h
+    if band_top <= 0:
+        raise RuntimeError("seam band does not fit below the paper")
+    if dark_top >= Hc:
+        raise RuntimeError("seam band does not fit above the dark region")
+
+    # the type column's right edge snaps UP to a whole seam cell, so the quiet
+    # zone and the seam share one grid (no half-cell at the column edge)
+    qedge = int(np.ceil(rects[0][2] / float(cell)) * cell)
+    qedge = min(qedge, Wc)
+    # ONE quiet zone: the paper above the seam, bleeding to the left and top
+    # edges with zero inset, so the type reads as a page margin and not as a
+    # pasted box
+    rects = [(0, 0, qedge, band_top)]
+
+    out = np.zeros((Hc, Wc, 3), dtype=np.uint8)
+    out[...] = np.array(PAPER, dtype=np.uint8)
+    out[dark_top:, :] = np.array(INK, dtype=np.uint8)      # dark region: full bleed
+
+    smask, fracs = seam_mask(Wc, Hc, 0, band_top, cell, rows, spec["scroll"])
+    out[smask] = np.array(INK, dtype=np.uint8)             # seam band: full width
+
+    # ONE accent: a ladder of thin rules inside the dark region, one rule per
+    # band row, continuing the seam's row rhythm below the band.  Not a floating
+    # block — it reads as a measurement scale, which is what the seam is.
+    ax0 = spec["accent_x_cell"]
+    aw = spec["accent_w_cell"]
+    ah = spec["accent_h_cells"]
+    accent_cells = 0
+    for k in range(spec["accent_rules"]):
+        ay0 = dark_top + spec["accent_top_offset_cells"] + k * spec["accent_pitch_cells"]
+        if ax0 + aw > Wc or ay0 + ah > Hc:
+            raise RuntimeError("accent ladder does not fit inside the dark region")
+        out[ay0:ay0 + ah, ax0:ax0 + aw] = np.array(FAMILY[spec["family"]], dtype=np.uint8)
+        accent_cells += ah * aw
+
+    out[tmask] = np.array(INK, dtype=np.uint8)                  # type is pure ink
+
+    big = np.repeat(np.repeat(out, up, axis=0), up, axis=1)
+    img = Image.fromarray(big, mode="RGB")
+    img.save(os.path.join(HERE, spec["file"]), format="PNG", optimize=True)
+
+    cols, counts = np.unique(big.reshape(-1, 3), axis=0, return_counts=True)
+    uniq = [tuple(int(v) for v in c) for c in cols]
+    hexof = lambda c: "#%02x%02x%02x" % tuple(int(v) for v in c)
+
+    text_rects = []
+    for it, bb in zip(items, boxes):
+        if bb is None:
+            continue
+        bx0, by0, bx1, by1 = bb
+        text_rects.append({
+            "kind": it["kind"], "text": it["text"], "size": it["size"],
+            "x": int(round(bx0 * up)), "y": int(round(by0 * up)),
+            "w": int(round((bx1 - bx0) * up)), "h": int(round((by1 - by0) * up)),
+        })
+    quiet_zones_px = [{"x": r[0] * up, "y": r[1] * up,
+                       "w": (r[2] - r[0]) * up, "h": (r[3] - r[1]) * up} for r in rects]
+    display_lines = [{"text": d["text"], "size": d["size"],
+                      "bbox_cell": d["bbox_cell"]} for d in disp_lines]
+    disp_sizes = [d["size"] for d in disp_lines] or [0]
+    accent_frac = accent_cells / float(Wc * Hc)
+
+    manifest = {
+        "path": spec["file"],
+        "output_width": Wo,
+        "output_height": Ho,
+        "cell_width": Wc,
+        "cell_height": Hc,
+        "upscale": up,
+        "cell_px": 2,
+        "bayer": "8x8 ordered, th=(B8[y&7][x&7]+0.5)/64",
+        "dot_pitch_px": 16,
+        "unique_colours": len(uniq),
+        "unique_colour_list": [hexof(c) for c in uniq],
+        "paper": "#%02x%02x%02x" % PAPER,
+        "ink": "#%02x%02x%02x" % INK,
+        "accent": "#%02x%02x%02x" % FAMILY[spec["family"]],
+        "family": spec["family"],
+        "two_tones_plus_at_most_one_accent": len(uniq) <= 4,
+        "exactly_two_tones_plus_one_accent": len(uniq) == 3,
+        "motif": "seam",
+        "time": spec["scroll"],
+        "field_zoom": 1.0,
+        "png_format": "8-bit RGB (PNG colour type 2), non-interlaced, no interlacing/palette",
+        "pure_function": True,
+        "typography": "real fonts",
+        "typefaces": {k: v for k, v in FONTS.items()},
+        "typeface_source": {k: FONT_SOURCE[k] for k in FONTS},
+        "display_line_height": DISPLAY_LH,
+        "display_optical_overshoot_em": DISPLAY_OVERSHOOT,
+        "display_left_margin_em": DISPLAY_LEFT_MARGIN_EM,
+        "display_max_overlap_cells": DISPLAY_MAX_OVERLAP_CELLS,
+        "quiet_zones_cell_rects": [list(r) for r in rects],
+        "text_rects": text_rects,
+        "quiet_zones": quiet_zones_px,
+        "display_lines": display_lines,
+        "headline_size": max(disp_sizes) if disp_lines else 0,
+        "display_max_size": max(disp_sizes),
+        "accent_min_block_cells": ACCENT_MIN_BLOCK_CELLS,
+        "accent_largest_block_cells": int(aw * ah),
+        "accent_rule_count": int(spec["accent_rules"]),
+        "accent_fraction": round(accent_frac, 5),
+        "accent_fraction_pct": round(accent_frac * 100.0, 3),
+        "accent_cells": int(accent_cells),
+        "pixel_counts": {hexof(c): int(n) for c, n in zip(cols, counts)},
+        "seam": {
+            "cell": cell,
+            "cell_output_px": cell * up,
+            "cell_mm": round(cell * up / 300.0 * 25.4, 4),
+            "cell_mm_true_size": SEAM_CELL_MM,
+            "rows": rows,
+            "band_height": band_h * up,
+            "band_height_mm": round(band_h * up / 300.0 * 25.4, 3),
+            "band_height_pct_of_page": round(band_h * up / float(Ho) * 100.0, 3),
+            "y_top": band_top * up,
+            "x0": 0,
+            "width": Wo,
+            "full_width": True,
+            "dark_top": dark_top * up,
+            "dark_full_bleed": True,
+            "scroll_offset_s": spec["scroll"],
+            "static": "s = 0 — print and video are static",
+            "ramp": "v = (r + 0.5) / rows; t = clamp(v*1.3 - 0.3 + s, 0, 1) * 64",
+            "bayer": ("8x8 recursive M'=[[4M,4M+2],[4M+3,4M+1]] (values 0..63); "
+                      "row phase (r % 8), column phase (i % 8)"),
+            "threshold_rule": ("the LIVE rule, verbatim and unquantised: a cell is ink "
+                               "when t > B8[(r % 8) * 8 + (i % 8)]"),
+            "ramp_t_per_row": [round(t, 6) for t in seam_ramp(rows, spec["scroll"])],
+            "ink_fraction_per_row": [round(f, 6) for f in fracs],
+            "monotone": False,
+            "monotone_note": ("the live ramp is NOT monotone by construction: the eight "
+                              "Bayer rows have different histograms, so rows 0..3 are pure "
+                              "paper, row 5 dips to 25%, and rows 8/10/11 sit near 87.5%. "
+                              "Reproduced exactly, not repaired — see NOTES.md"),
+            "scale_used": "proportional",
+            "scale_proportional": {
+                "derivation": ("the screen seam is 96 px in a ~900 px viewport = ~10.7% of "
+                               "the height; on A4/300 dpi (3508 px) that is ~375 px, i.e. "
+                               "~31 px per cell for 12 rows; realised at an integer 30 px "
+                               "per cell = 360 px band"),
+                "cell_output_px": cell * up,
+                "band_height_px": band_h * up,
+                "band_height_pct_of_page": round(band_h * up / float(Ho) * 100.0, 3),
+            },
+            "scale_true_size": {
+                "rule": ("the system print rule: 16 px = 1.35 mm at 300 dpi => one seam "
+                         "cell (8 px) = 0.675 mm, band 96 px = 8.13 mm = 2.7% of an A4 "
+                         "page — at true size the seam reads as a hairline"),
+                "cell_output_px": 8,
+                "band_height_px": 96,
+                "band_height_pct_of_page": round(96 / float(Ho) * 100.0, 3),
+            },
+            "accent": {
+                "form": "ladder of thin rules inside the dark region",
+                "rules": int(spec["accent_rules"]),
+                "rule_height_px": ah * up,
+                "rule_width_px": aw * up,
+                "pitch_px": spec["accent_pitch_cells"] * up,
+                "first_rule_y": (dark_top + spec["accent_top_offset_cells"]) * up,
+                "note": ("one rule per band row, continuing the seam's row rhythm below "
+                         "the band; reads as a measurement scale, not a floating block"),
+            },
+        },
+    }
+    return manifest
+
+
+def make_seam_spec():
+    """Composition 4 — the pixel seam as an A4 poster, at the PROPORTIONAL scale."""
+    Wc, Hc = 1240, 1754
+    g = Grid(Wc)
+    return {
+        "file": "seam_poster_a4.png", "cell_w": Wc, "cell_h": Hc, "upscale": 2,
+        "family": "comp", "t": SEAM_SCROLL,
+        "col_x": g.x(0), "col_w": 520,
+        "type_blocks": [
+            {"kind": "display", "lines": ["PIXEL", "SEAM"],
+             "y": 120, "w": 560, "max_size": 260},
+            {"kind": "text",
+             "lines": ["One Bayer matrix at two scales:",
+                       "the field dithers tone, the seam dithers scale."],
+             "y": 580, "w": 620},
+            {"kind": "mono", "text": "\u00a712 / SEAM / 12 ROWS / s = 0",
+             "y": 700, "w": 520, "track": 0.07},
+            {"kind": "mono", "text": "COMP \u00b7 #9a9a96 \u00b7 one family per composition",
+             "y": 780, "w": 520, "track": 0.07},
+        ],
+        # paper 0..900 (51.3%), seam band 900..1080 (180 cells = 360 px = 10.26%),
+        # dark region 1080..1754 (38.4%) — full bleed to left, right and bottom
+        "band_top_cell": 900,
+        "seam_rows": SEAM_ROWS,
+        "seam_cell": SEAM_CELL_RENDER,
+        "scroll": SEAM_SCROLL,
+        "accent_x_cell": int(round(g.x(0))),
+        "accent_w_cell": 273,
+        "accent_h_cells": 6,
+        "accent_pitch_cells": SEAM_CELL_RENDER,
+        "accent_rules": SEAM_ROWS,
+        "accent_top_offset_cells": SEAM_CELL_RENDER,
+    }
+
+
 def main():
     os.makedirs(HERE, exist_ok=True)
     print("font dir:", FONT_DIR, "(exists: %s)" % os.path.isdir(FONT_DIR))
@@ -906,6 +1222,22 @@ def main():
             m["quiet_zones_cell_rects"],
             [(t["kind"], t["x"], t["y"], t["w"], t["h"]) for t in m["text_rects"]]))
         print("   counts:", m["pixel_counts"])
+    seam_m = build_seam(make_seam_spec())
+    manifest["outputs"].append(seam_m)
+    print("%-14s %dx%d  cell %dx%d  up %d  colours=%d %s" % (
+        seam_m["path"], seam_m["output_width"], seam_m["output_height"],
+        seam_m["cell_width"], seam_m["cell_height"], seam_m["upscale"],
+        seam_m["unique_colours"], seam_m["unique_colour_list"]))
+    print("   accent: %.3f%% of frame (%d cells), largest block %d cells" % (
+        seam_m["accent_fraction_pct"], seam_m["accent_cells"],
+        seam_m["accent_largest_block_cells"]))
+    print("   seam: cell %d render px (%d output px, %.3f mm), rows %d, band %d px "
+          "(%.2f mm) at y=%d" % (
+              seam_m["seam"]["cell"], seam_m["seam"]["cell_output_px"],
+              seam_m["seam"]["cell_mm"], seam_m["seam"]["rows"],
+              seam_m["seam"]["band_height"], seam_m["seam"]["band_height_mm"],
+              seam_m["seam"]["y_top"]))
+    print("   seam ink per row:", seam_m["seam"]["ink_fraction_per_row"])
     with open(os.path.join(HERE, "render_manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=2)
     print("wrote render_manifest.json")

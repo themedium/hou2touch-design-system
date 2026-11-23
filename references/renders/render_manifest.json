@@ -456,6 +456,229 @@
         "#65a30d": 34876,
         "#e9e7e0": 864980
       }
+    },
+    {
+      "path": "seam_poster_a4.png",
+      "output_width": 2480,
+      "output_height": 3508,
+      "cell_width": 1240,
+      "cell_height": 1754,
+      "upscale": 2,
+      "cell_px": 2,
+      "bayer": "8x8 ordered, th=(B8[y&7][x&7]+0.5)/64",
+      "dot_pitch_px": 16,
+      "unique_colours": 3,
+      "unique_colour_list": [
+        "#0b0b0c",
+        "#9a9a96",
+        "#e9e7e0"
+      ],
+      "paper": "#e9e7e0",
+      "ink": "#0b0b0c",
+      "accent": "#9a9a96",
+      "family": "comp",
+      "two_tones_plus_at_most_one_accent": true,
+      "exactly_two_tones_plus_one_accent": true,
+      "motif": "seam",
+      "time": 0.0,
+      "field_zoom": 1.0,
+      "png_format": "8-bit RGB (PNG colour type 2), non-interlaced, no interlacing/palette",
+      "pure_function": true,
+      "typography": "real fonts",
+      "typefaces": {
+        "display": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/h2t-bebas.otf",
+        "text": "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "mono": "/System/Library/Fonts/Menlo.ttc"
+      },
+      "typeface_source": {
+        "display": "project",
+        "text": "system",
+        "mono": "system"
+      },
+      "display_line_height": 0.8,
+      "display_optical_overshoot_em": 0.06,
+      "display_left_margin_em": -0.03,
+      "display_max_overlap_cells": 2,
+      "quiet_zones_cell_rects": [
+        [
+          0,
+          0,
+          675,
+          900
+        ]
+      ],
+      "text_rects": [
+        {
+          "kind": "display",
+          "text": "PIXEL",
+          "size": 260,
+          "x": 100,
+          "y": 244,
+          "w": 866,
+          "h": 364
+        },
+        {
+          "kind": "display",
+          "text": "SEAM",
+          "size": 260,
+          "x": 90,
+          "y": 656,
+          "w": 850,
+          "h": 372
+        },
+        {
+          "kind": "text",
+          "text": "One Bayer matrix at two scales:",
+          "size": 31,
+          "x": 98,
+          "y": 1174,
+          "w": 874,
+          "h": 56
+        },
+        {
+          "kind": "text",
+          "text": "the field dithers tone, the seam dithers scale.",
+          "size": 31,
+          "x": 96,
+          "y": 1258,
+          "w": 1232,
+          "h": 52
+        },
+        {
+          "kind": "mono",
+          "text": "\u00a712 / SEAM / 12 ROWS / s = 0",
+          "size": 27,
+          "x": 100,
+          "y": 1412,
+          "w": 992,
+          "h": 46
+        },
+        {
+          "kind": "mono",
+          "text": "COMP \u00b7 #9a9a96 \u00b7 one family per composition",
+          "size": 17,
+          "x": 98,
+          "y": 1566,
+          "w": 956,
+          "h": 34
+        }
+      ],
+      "quiet_zones": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1350,
+          "h": 1800
+        }
+      ],
+      "display_lines": [
+        {
+          "text": "PIXEL",
+          "size": 260,
+          "bbox_cell": [
+            50.0,
+            122.0,
+            483.0,
+            304.0
+          ]
+        },
+        {
+          "text": "SEAM",
+          "size": 260,
+          "bbox_cell": [
+            45.0,
+            328.0,
+            470.0,
+            514.0
+          ]
+        }
+      ],
+      "headline_size": 260,
+      "display_max_size": 260,
+      "accent_min_block_cells": 9,
+      "accent_largest_block_cells": 1638,
+      "accent_rule_count": 12,
+      "accent_fraction": 0.00904,
+      "accent_fraction_pct": 0.904,
+      "accent_cells": 19656,
+      "pixel_counts": {
+        "#0b0b0c": 3996420,
+        "#9a9a96": 78624,
+        "#e9e7e0": 4624796
+      },
+      "seam": {
+        "cell": 15,
+        "cell_output_px": 30,
+        "cell_mm": 2.54,
+        "cell_mm_true_size": 0.675,
+        "rows": 12,
+        "band_height": 360,
+        "band_height_mm": 30.48,
+        "band_height_pct_of_page": 10.262,
+        "y_top": 1800,
+        "x0": 0,
+        "width": 2480,
+        "full_width": true,
+        "dark_top": 2160,
+        "dark_full_bleed": true,
+        "scroll_offset_s": 0.0,
+        "static": "s = 0 \u2014 print and video are static",
+        "ramp": "v = (r + 0.5) / rows; t = clamp(v*1.3 - 0.3 + s, 0, 1) * 64",
+        "bayer": "8x8 recursive M'=[[4M,4M+2],[4M+3,4M+1]] (values 0..63); row phase (r % 8), column phase (i % 8)",
+        "threshold_rule": "the LIVE rule, verbatim and unquantised: a cell is ink when t > B8[(r % 8) * 8 + (i % 8)]",
+        "ramp_t_per_row": [
+          0.0,
+          0.0,
+          0.0,
+          5.066667,
+          12.0,
+          18.933333,
+          25.866667,
+          32.8,
+          39.733333,
+          46.666667,
+          53.6,
+          60.533333
+        ],
+        "ink_fraction_per_row": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.504032,
+          0.120968,
+          0.504032,
+          0.495968,
+          0.758065,
+          0.495968,
+          1.0,
+          0.879032
+        ],
+        "monotone": false,
+        "monotone_note": "the live ramp is NOT monotone by construction: the eight Bayer rows have different histograms, so rows 0..3 are pure paper, row 5 dips to 25%, and rows 8/10/11 sit near 87.5%. Reproduced exactly, not repaired \u2014 see NOTES.md",
+        "scale_used": "proportional",
+        "scale_proportional": {
+          "derivation": "the screen seam is 96 px in a ~900 px viewport = ~10.7% of the height; on A4/300 dpi (3508 px) that is ~375 px, i.e. ~31 px per cell for 12 rows; realised at an integer 30 px per cell = 360 px band",
+          "cell_output_px": 30,
+          "band_height_px": 360,
+          "band_height_pct_of_page": 10.262
+        },
+        "scale_true_size": {
+          "rule": "the system print rule: 16 px = 1.35 mm at 300 dpi => one seam cell (8 px) = 0.675 mm, band 96 px = 8.13 mm = 2.7% of an A4 page \u2014 at true size the seam reads as a hairline",
+          "cell_output_px": 8,
+          "band_height_px": 96,
+          "band_height_pct_of_page": 2.737
+        },
+        "accent": {
+          "form": "ladder of thin rules inside the dark region",
+          "rules": 12,
+          "rule_height_px": 12,
+          "rule_width_px": 546,
+          "pitch_px": 30,
+          "first_rule_y": 2190,
+          "note": "one rule per band row, continuing the seam's row rhythm below the band; reads as a measurement scale, not a floating block"
+        }
+      }
     }
   ]
 }

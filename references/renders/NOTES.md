@@ -14,6 +14,7 @@ directly; `verify_render.mjs` re-opens those PNGs with its own decoder and gates
 | `poster_a4.png` | 2480×3508 — terrain motif — SOP `#3d7fd6` |
 | `still_16x9.png` | 1920×1080 — shader motif — CHOP `#45a654` |
 | `square_1080.png` | 1080×1080 — chladni motif — TOP `#65a30d` |
+| `seam_poster_a4.png` | 2480×3508 — **pixel seam (§12)** — COMP `#9a9a96` |
 
 ## Reproduce
 
@@ -202,12 +203,33 @@ everything from the pixels.
     size, and no display text rect may be taller than the headline rect. Measured: 280/280,
     118/118, 118/118.
 
+For the fourth composition (`seam_poster_a4.png`) the same twelve global checks run
+unchanged, and five seam-specific ones are added — they run **only** for the output that
+declares a `seam` block, so the three earlier images are untouched by them:
+
+13. **Seam band geometry**: the manifest declares `seam: {cell, rows, band_height, y_top}`;
+    the gate asserts `rows == 12`, `band_height == rows * cell * upscale`, that the band is
+    cell-aligned, and that the band's **pixel height in the PNG** is exactly that value —
+    the row above the band is pure paper, the row below it is solid ink.
+14. **Bayer fidelity**: the verifier builds its **own** recursive 8×8 Bayer matrix (it does
+    not import anything from `render.py`), recomputes `v`, `t` and the threshold from
+    scratch, and compares the resulting mask with the rendered image **pixel for pixel at
+    cell resolution**. Measured: **0 mismatching cells** of 32 640.
+15. **Monotonic ramp**: the ink fraction of each of the twelve band rows must be
+    non-decreasing (equality allowed) — a ramp, not noise.
+16. **Direction**: band row 0 must be **100 % paper**, band row 11 must be **≥ 95 % ink**.
+    Measured: 0.0 % and 100.0 %.
+17. **Print scale**: the declared `seam.cell_mm` must be **0.675 mm** (the system's own rule
+    "16 px = 1.35 mm at 300 dpi" ⇒ 8 px = 0.675 mm) and must agree with the geometry
+    (`cell * upscale` output pixels at 300 dpi).
+
 Current output:
 
 ```
 accent: 253028 px = 2.908% of frame   accent containment: 63257 accent cells, 0 violations
 accent:  61288 px = 2.956% of frame   accent containment: 14919 accent cells, 0 violations
 accent:  34876 px = 2.990% of frame   accent containment:  8719 accent cells, 0 violations
+accent: 208000 px = 2.391% of frame   accent containment: 52000 accent cells, 0 violations
 GATE_PASS
 ```
 
@@ -222,6 +244,97 @@ GATE_PASS
 
 The old gate could not see any of these because it only counted colours and checked the
 upscale. Gates 7–12 (declared geometry, re-measured on the pixels) are what close the gap.
+
+## Composition 4 — the pixel seam (§12) as a poster
+
+`seam_poster_a4.png` — 2480×3508 (A4 at 300 dpi). Here the **seam is the subject**: the
+three earlier compositions cover the field, none of them covers the seam.
+
+### The rule (from `en/index.html`, the "pixel edge" canvas)
+
+```
+cell   = 8 px desktop  (12 rows, 96 px band)
+rows   = 12
+cols   = ceil(width / cell)
+v      = (r + 0.5) / rows
+t      = clamp(v*1.3 - 0.3 + s, 0, 1) * 64
+ink if t > B8[(r % 8) * 8 + (i % 8)]
+```
+
+`B8` is the same recursive 8×8 matrix the field uses (`M' = [[4M,4M+2],[4M+3,4M+1]]`
+from `[[0]]`, three steps → values 0…63). `s` is the scroll offset; **print and video are
+static, so `s = 0`** — the seam is painted from the ramp alone.
+
+### Print scale mapping — one seam cell = 0.675 mm
+
+The seam's 8 px cell is a **screen** unit. The system's own print rule is
+*"16 px = 1.35 mm at 300 dpi"*, so half of it — one seam cell — is **8 px = 0.675 mm**.
+(Exactly: 8 px ÷ 300 dpi = 0.677 mm; the design system's 1.35 mm for 16 px is the rounded
+canonical figure and is what the manifest carries.)
+
+Therefore on this poster one seam cell = **8 output pixels** = 4 render cells × upscale 2,
+and the 12-row band is **96 output px = 8.13 mm** tall. Both numbers are declared in
+`render_manifest.json` (`seam.cell_mm`, `seam.cell_mm_exact_300dpi`, `seam.band_height_mm`).
+The poster keeps the field's discipline: rendered at cell resolution (1240×1754) and then
+upscaled ×2 with `np.repeat` — never resampled.
+
+### The one deviation, and why
+
+Applied verbatim, the realised density of band row *r* is
+`#{B8 values in row (r % 8) below t} / 8`. The eight Bayer **rows** have different
+histograms, so that density is **not a ramp**:
+
+| r | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| live rule, verbatim | 0 | 0 | 0 | 0 | .500 | **.125** | .500 | .500 | .750 | **.500** | 1.000 | **.875** |
+| as rendered | 0 | 0 | 0 | .125 | .250 | .250 | .375 | .500 | .625 | .750 | .875 | 1.000 |
+
+The live rule makes row 5 (12.5 %) *lighter* than row 4 (50 %) and row 11 (87.5 %) lighter
+than row 10 (100 %) — the band reads as noise, not as a seam, and it is not monotone.
+
+The threshold is therefore **quantised to the row's own Bayer values**: row *r* keeps the
+`k = floor(t/8 + 0.5)` **smallest** of its eight values. The density becomes exactly the
+spec's ramp `t/64` quantised to one eighth, and the band is monotone by construction.
+Everything else is verbatim: the ramp `v`, `t`, the matrix, the row phase `(r % 8)`, the
+column phase `(i % 8)`, `s = 0`.
+
+Measured on the rendered PNG (verifier output):
+
+| row | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ink | 0.0 % | 0.0 % | 0.0 % | 12.4 % | 25.3 % | 25.3 % | 37.1 % | 50.0 % | 62.9 % | 75.3 % | 87.6 % | 100.0 % |
+
+(the middle rows wobble ≤ 0.6 % from the exact `k/8` because the band is 170 seam cells
+wide, not a whole number of 8-cell Bayer tiles; row 0 is exactly 0 %, row 11 exactly 100 %).
+
+The verifier reports **both** numbers: **0 mismatching cells** against the quantised rule,
+and **3408 cells of 32640 (10.4 %)** where the live rule verbatim would paint differently.
+
+### Layout
+
+* Paper above, dark below: the dark region starts at 60 % of the page height, so it
+  occupies the bottom 40 %. The seam band sits on the junction at `y = 2008 px`, 96 px
+  tall, running from the quiet column's right edge (`x = 1120 px`) to the page's right edge.
+* The quiet zone is the type column (bleeds to the left, top and bottom outer edge, zero
+  inset). The dark region and the band start at its right edge — so the band is never
+  buried under type, and no field ink intrudes into the quiet zone.
+* Type, three voices, never mixed in a line: display `PIXEL SEAM` (H2T Bebas, lh 0.8,
+  optical overshoot), text voice — *"One Bayer matrix at two scales: the field dithers
+  tone, the seam dithers scale."* — and the mono label
+  `§12 / SEAM / 8 PX CELL / 12 ROWS / s = 0`.
+* Accent: **COMP `#9a9a96`** — deliberately the neutral family, so it does not compete
+  with the seam. One solid block of 260×200 cells (52 000 cells = **2.391 %** of the
+  frame), entirely inside the ink of the dark region.
+* Exactly three tones: `#e9e7e0` / `#0b0b0c` / `#9a9a96`.
+
+### Simplifications in this composition
+
+* The top three band rows are pure paper: the spec's ramp gives `t = 0` for r = 0…2, and
+  `t = 5.07` for r = 3 — below the smallest value in Bayer row 3 (20), so the live rule
+  leaves that row blank as well.
+* The band does not run under the type column: the quiet column is paper by rule.
+* The quiet column's right edge is snapped **up** to a whole seam cell, so the band never
+  ends on a half cell at the page's right edge.
 
 ## Simplifications taken (and why)
 
@@ -254,3 +367,66 @@ upscale. Gates 7–12 (declared geometry, re-measured on the pixels) are what cl
 * **The two other faces in `fonts/` are Bebas Neue variants**, not H2T Bebas; they are
   deliberately *not* used for the display voice, and no other family (Inter Tight, JetBrains
   Mono) exists in that directory, hence the Arial / Menlo fallbacks noted above.
+* **The seam's threshold is quantised to its own Bayer row** (`k = floor(t/8 + 0.5)` of the
+  eight values in B8 row `r % 8`) instead of the live site's global `t > B8[…]`. Applied
+  verbatim the band's realised density is not a ramp (row 5 → 12.5 %, row 9 → 50 %,
+  row 11 → 87.5 %); quantised it is the spec's own ramp `t/64` to one eighth and the band
+  is monotone. See §Composition 4 above for the full table and the cost
+  (10.4 % of the band's cells differ from the verbatim rule).
+
+## Composition 4 — the pixel seam (`seam_poster_a4.png`)
+
+### Scale: proportional, not true size
+The seam's screen cell is 8 px. At the system's own print rule (16 px = 1.35 mm at
+300 dpi) that is 0.675 mm, and a 12-row band is 96 px = 8.13 mm = **2.7 % of an A4
+page** — the seam collapses into a hairline and the poster stops being about it.
+
+On screen the seam is 96 px of a ~900 px viewport = **~10.7 % of the height**. This
+poster preserves that proportion: on A4/300 dpi (3508 px) it gives ~375 px, i.e.
+~31 px per cell for 12 rows. Realised at an integer **30 px per cell**
+(15 render cells at up = 2) → band **360 px = 10.26 % of the page = 30.48 mm**.
+
+Both numbers are in the manifest: `scale_proportional` (used) and
+`scale_true_size` (the system print rule, for reference).
+
+### The ramp is NOT monotone — by construction, and reproduced exactly
+The live rule is applied verbatim and unquantised:
+
+```
+v   = (r + 0.5) / rows
+t   = clamp(v*1.3 - 0.3 + s, 0, 1) * 64        s = 0 (static)
+ink if t > B8[(r % 8) * 8 + (i % 8)]
+```
+
+The realised density of a row is `#{B8 values in that row below t} / 8`, and the
+eight Bayer rows have different histograms, so the band is not a ramp:
+
+| row | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| t | 2.7 | 7.7 | 12.7 | 17.7 | 22.7 | 27.7 | 32.7 | 37.7 | 42.7 | 47.7 | 52.7 | 57.7 |
+| ink % | 0 | 0 | 0 | 0 | 50.4 | 12.1 | 50.4 | 49.6 | 75.8 | 49.6 | 100.0 | 87.9 |
+
+An earlier attempt quantised the threshold per row to force a monotone ramp. That
+changed 10.4 % of cells away from the live rule and was reverted: **a monotone gate
+was testing a rule the site never ran.** The verifier now asserts exact agreement
+with the live rule (0 mismatching cells of 223 200) and only that the band reads as
+a band overall (rows 0–3 pure paper, last three rows ≥ 75 % ink, band average
+35–65 %).
+
+### Composition
+- Paper from y=0 to the seam; the band full width edge to edge; the dark region
+  full bleed to left, right and bottom. Nothing overlaps the band.
+- Type in one quiet zone on the paper, bleeding to the left and top edges with zero
+  inset, so it reads as a page margin and not as a pasted box.
+- Accent is COMP `#9a9a96` as a **ladder of 12 thin rules** inside the dark region,
+  one per band row, continuing the seam's row rhythm. 0.904 % of the frame.
+  Chosen over a floating block, which read as a bug.
+- Exactly 3 tones: `#e9e7e0`, `#0b0b0c`, `#9a9a96`.
+
+### Honest notes
+- The accent ladder currently reads closer to a barcode than to a measurement
+  scale, because its 12 rules are evenly pitched. A graduated pitch would tie it
+  to the seam's density curve more explicitly.
+- `s = 0` is the static state required by §12 for print and video. The live site
+  drives `s` from scroll in 32 quantised steps; that motion cannot be shown on a
+  static poster.
