@@ -103,6 +103,22 @@ for (const gap of ['8', '11']) {
   }
 }
 
+// 15 — §13 reframed as an instrument readout
+if (!master.includes('instrument readout')) fails.push(`${MASTER} does not contain "instrument readout"`);
+
+// 16 — colour encodes family, never state
+if (!/colour encodes/i.test(master)) fails.push(`${MASTER} does not state that colour encodes the family`);
+if (!master.includes('family, never state')) fails.push(`${MASTER} does not state the "family, never state" rule`);
+
+// 17 — the .btn.rec clarification
+if (!master.includes('not a recording')) fails.push(`${MASTER} does not clarify that .btn.rec is not a recording indicator`);
+
+// 18 — the TouchDesigner source frame is cited inside §13
+if (!master.includes('окно TouchDesigner на бумаге')) fails.push(`${MASTER} does not cite the TouchDesigner source frame`);
+
+// 19 — the wrong framing is gone
+if (/stamp on paper/i.test(master)) fails.push(`${MASTER} still contains the removed "stamp on paper" framing`);
+
 if (fails.length) {
   console.log(`GATE_FAIL: ${fails.length} check(s) failed`);
   for (const f of fails) console.log(`  - ${f}`);

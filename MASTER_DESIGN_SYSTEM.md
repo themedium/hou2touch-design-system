@@ -477,64 +477,144 @@ On course pages the seam also ships as an **inline base64 8×24 PNG**, tiled wit
 
 ## 13. Plate policy
 
-### 13.1 Principle
+### 13.1 Principle — the plate is an instrument readout, not a container
 
-> **A plate is a stamp on paper, not a container.**
+> **A plate is an instrument readout, not a container.**
 
-The system separates by **whitespace and hairline**, not by boxes. Therefore a plate is permitted
-**only where the content is a *label, a control, or a datum*** — **never** to group content that
-whitespace could group.
+A plate is **panel chrome borrowed from the TouchDesigner network editor**. In the live source
+it is built exactly that way — the panel classes are the chrome of a *node panel*, not a box
+around text:
 
-This is a **decision rule**, not a style guide: it tells you whether to draw a plate at all.
+> `en/index.html:150` — `/* хром панелей: .pn = средний (шапка .ph + подвал .pf); .pn.full = полный (+ порты, флаги .fl); .pn.lite = лёгкий (линия-заголовок) */`
 
-### 13.2 Closed vocabulary — exactly four permitted families
+and the whole composition is framed the same way:
 
-| # | Family | Radius | Size / fill | For |
+> `en/index.html:380` — `/* ---------- 03 сеть курсов: окно TouchDesigner на бумаге; профили в ноде «Ты», провод по маршруту, «нырок» в COMP по клику ---------- */`
+
+So a plate exists to present **a datum with a field and a family** — a name, a family suffix,
+and a value or a state. Three obligations follow, and they are the whole decision rule:
+
+- A plate **presents a datum**. If it only holds prose, it is not a plate.
+- It is **never** used to group content that whitespace could group.
+- It is **never** decoration.
+
+This is P5 (Instrument surface) applied to a container: every mark is a label, a tick, a rule
+or a counter — and the plate is the surface that carries the label and the counter.
+
+### 13.2 Anatomy contract (from `.pn`)
+
+A plate has **up to three slots, and nothing else**:
+
+| Slot | Selector | What it carries |
+|---|---|---|
+| **header** | `.pn` → `.ph` | colour square (9×9, family) + path/name `.id` + family suffix `<u>XXX</u>` + optional right slot `.r` for a count |
+| **body** | `.pn` body | the free-form datum |
+| **footer** | `.pn` → `.pf` | label + count + navigation |
+| **ports** | `.pn.full` only | in/out topology dots (9×9 hollow circles) |
+| **flags** | `.pn.full` only | binary state flags `.fl` |
+
+Source for ports and flags:
+
+> `en/index.html:1627` — `/* порты TD по бокам, как у .pn.full: заливка — тьма секции, кольцо — DAT */`
+> `en/index.html:1653` — `/* флаги ноды: V (viewer) включён — «открытая строка», проверенность без слов (C-M1) */`
+
+**The register rule is verbatim from the source:**
+
+> `en/index.html:1063` — `/* f-lc (реш. 8: C-09 + T-18 + C-15) — регистр подписей, как в TD: имена операторов, пути, почта, ники и строки данных — строчными, трекинг 0; суффикс семейства — капс .06em 12 px; … */`
+
+In plain terms: **names, paths, emails, nicknames and data strings are lowercase, tracking 0**;
+the **family suffix is caps, `.06em`, 12 px**. This is TouchDesigner's own typographic
+register, and it is precisely what makes the plate read as an *instrument* rather than as a
+badge. A plate that mixes registers has stopped being an instrument.
+
+#### The verified payload map
+
+| family | payload | carries attention? |
+|---|---|---|
+| `.op` | node path + OP family suffix (`network1 <u>COMP</u>`, `render1 <u>TOP</u>`, `text1 <u>DAT</u>`) | no — category |
+| `.tag` / `.tag.key` | difficulty level (`beginner` → `advanced`) + audience (`VJs`, `3D Artists`) | no — label |
+| `.sq9` | family colour swatch (9×9, `background:var(--c)`) | no — category |
+| `.pn` header `.ph` | colour square + path `.id` + family `<u>XXX</u>` + right slot `.r` | no |
+| `.pn` footer `.pf` | label + count + nav (`text1 · 8 reviews`, `01 / 08`) | partly |
+| `#n3In` param panel | `role="radiogroup"` of learning paths = node parameters | yes — control, not alert |
+| `.pn.full` ports | in/out topology dots (9×9 hollow circles) | no — topology |
+| `.fl b.on` viewer flag | binary display flag | yes — state, not warning |
+| timeline | `frame 0000 / 1800` (scroll progress, `aria-hidden`) + live `fps` | yes — the only genuinely live readout |
+| `.btn.rec` | red fill is the brand `--hou` orange, **not** a recording indicator | CTA |
+
+Node-name vocabulary in use: `h2t1, network1, trk_h2t, trk_paths, trk_100/200/300, author1,
+render1, works1, text1, youtube1, null_out, out1, moviefilein1, sop01…sop17, lesson00_n, in1`.
+
+### 13.3 The four families — a closed vocabulary, chosen by function
+
+| # | Family | Radius | Size / fill | Function it may serve |
 |---|---|---|---|---|
-| 1 | **Chip** | **2 px** | height **24 px**, inset hairline `--line2`, mono 10–12 px, `.07em`, UPPER, optional 7–9 px family-colour square | operator tags, audience/level labels, flags |
-| 2 | **Card** | **6 px** | 1 px border, **NO fill** except the node-panel gradient | a simulated node, an end-of-list link. **Maximum one per screen region** |
-| 3 | **Pill CTA** | **999 px** | height **56 px** | the **primary call to action only**. Never a label, never a nav item, never a tag |
-| 4 | **Bare plate** | **0** | no border, no fill | price columns, table-like data — anything that is a *column of content*, not a box |
+| 1 | **Chip** | **2 px** | height **24 px**, inset hairline `--line2`, mono 10–12 px | a **single datum of category**: node path + family (`.op`), or level/audience (`.tag`) |
+| 2 | **Card** | **6 px** | 1 px border, **NO fill** except the node-panel gradient | a **full panel** with header/body/footer: a simulated node (`.pn`), a review panel, a parameter panel. **One per screen region** |
+| 3 | **Pill CTA** | **999 px** | height **56 px** | the **primary action only**. Never a label, never a nav item, never a tag |
+| 4 | **Bare plate** | **0** | no border, no fill | a **column of data** (price, table). Radius 0, no border, no fill |
 
-The four families map to the live classes: chip = `.op` / `.tag` / `.tag.key`; card = `.pn` / `.enl` /
-`.sq`; pill CTA = `.btn.pill`; bare plate = `.tier` / `.seg` / `.inp button`.
+The four families map to the live classes: chip = `.op` / `.tag` / `.tag.key`; card = `.pn` /
+`.enl` / `.sq`; pill CTA = `.btn.pill`; bare plate = `.tier` / `.seg` / `.inp button`.
 
-### 13.3 Forbidden
+The family is chosen by **what the plate does**, never by how big it looks:
 
-- Any radius outside `{0, 2, 6, 999}`.
-- A plate with a **drop shadow**.
-- A plate with `backdrop-filter`.
-- A plate whose fill is a **gradient** (except the node panel).
-- A plate **at a dark↔light junction** — the seam does that job; a plate there is a double
-  statement.
+- If it shows **one category value** → Chip.
+- If it shows **a node panel with header, body and footer** → Card.
+- If it is the **thing to press** → Pill CTA.
+- If it is **a column of numbers or rows** → Bare plate.
 
-### 13.4 The junction rule
+### 13.4 Colour encodes FAMILY, never STATE
 
-At a dark↔light boundary the **only** permitted device is the **pixel seam**. No plate, no card,
-no divider, no gradient may be used to mark that boundary.
+> `en/index.html:1116-1117` — `/* f-fam (C-08, реш. 15; согласовано 30.09) — цвет = семейство: курсы — контейнеры COMP (квадрат шапки --comp), цвет предмета — полоса 3 px по верху (op.color в TD): Hou2Touch → SOP, Extreme I и II → CHOP, GLSL → TOP; route1 — DAT; теги Houdini → SOP, TouchDesigner → TOP; «песок» не используется. */`
+
+**Colour encodes family, never state.** This is a hard rule with no exceptions:
+
+- A plate may **never** be coloured to signal urgency, error, success, warning or newness.
+- The family mapping is fixed: courses → COMP, Hou2Touch → SOP, Extreme I / II → CHOP,
+  GLSL → TOP, `route1` → DAT. Tags: Houdini → SOP, TouchDesigner → TOP. «Песок» is not used.
+- The **only permitted state signal in the whole system** is the binary viewer flag
+  `.fl b.on` (fill `--td`) — and it is a *state*, not a warning:
+  `en/index.html:1653` — `/* флаги ноды: V (viewer) включён — «открытая строка», проверенность без слов (C-M1) */`.
+
+**Explicit clarification so nobody "fixes" it later:** the red fill of `.btn.rec` is the brand
+accent `--hou` — it is not a recording indicator, not an alert, and not a state colour. It is
+a CTA. It must not be recoloured, and it must not be read as one of the exceptions above.
+
+### 13.5 Attention budget — the honest current state
+
+The system's **intent** is that plates present information that requires attention. The
+**current payloads are mostly catalogue and marketing labels**: node paths, family suffixes,
+difficulty levels and audiences are all static.
+
+The only genuinely live readouts in the live source are:
+
+- the timeline **FPS** (updated ~2 Hz via `requestAnimationFrame`),
+- the timeline **frame counter** `frame 0000 / 1800` (scroll-derived, `aria-hidden`),
+- event-driven counters such as `01 / 08`.
+
+Everything else is static labelling dressed as a readout. That is the gap, stated plainly
+rather than papered over with a rule about how many plates a screen may hold.
+
+**Forward rule for any new plate:**
+
+> **A new plate must carry a datum that changes, or a datum that must be acted on. If it only
+> repeats a static label, it is a `.tag`, not a panel.**
+
+There is deliberately **no rule about the number of plates on a screen**. Counting plates was
+the wrong discipline: it counted boxes, not information.
+
+### 13.6 The junction rule
+
+At a dark↔light boundary the **only** permitted device is the **pixel seam** (§12). No plate,
+no card, no divider, no gradient may be used to mark that boundary.
 
 > **Two devices for one boundary is a violation.**
 
 The seam already states "the value changes here". A box, rule or fade stating it again is a
 **double statement** on the same edge, and it breaks the 1-bit reading (§12).
 
-### 13.5 Density budget
-
-Observed reality on `en/index.html`: **≈130 plate surfaces** (≈45 `.btn`, ≈30 `.tag`, 13 `.op`,
-~8 `.pn`, ~25 circles, ~15 media frames) against **~20 course cards that are pure open paper**
-(`.cc` has no background, no border, no radius). The site is therefore **plate-heavy at the
-control layer and plate-light at the container layer** — which is the correct axis.
-
-The budget rule:
-
-- Plates must not exceed roughly **one per 6 lines of text** in any viewport-height of content.
-- A section that needs **more than three chips in a row is a list, not a plate cluster**.
-
-The test:
-
-> **If you can remove the plate and the content still separates, remove the plate.**
-
-### 13.6 Remediation register
+### 13.7 Remediation register
 
 Observed in the live source. Every radius outside the vocabulary is a **must-fix** against M13/X9.
 
@@ -548,11 +628,11 @@ Observed in the live source. Every radius outside the vocabulary is a **must-fix
 | gradient fill `--pnb:linear-gradient(180deg,#141416,#111113)` | `.pn`, ~8× per page | node panel is the **one permitted gradient fill** | **permitted exception** (M15, family 2) |
 | gradient fill | `.aud-yes` surface gradient | node-panel family only | must-fix |
 | `drop-shadow` ×3 | `.aud-yes`, `.cc-vw-box`, `.f-net3 .n3-q::before` | remove | must-fix (M15) |
-| `backdrop-filter: blur()` ×4 | `.nav.stuck`, `.tlb`, `.f-nav3 .nav.lt`, `.f-mstack .mbar` | permitted **only** for sticky chrome — see §13.7 | **permitted exception** (sticky chrome) |
+| `backdrop-filter: blur()` ×4 | `.nav.stuck`, `.tlb`, `.f-nav3 .nav.lt`, `.f-mstack .mbar` | permitted **only** for sticky chrome — see §13.8 | **permitted exception** (sticky chrome) |
 | radius **0**, no border | `.tier` price column | 0 is in the vocabulary (family 4) | **permitted exception** (bare plate) |
 | `.btn` declares neither height nor radius in `en/index.html:140` | — | must match `src/template.html:104` (`height:48px; border-radius:2px`) | must-fix (source inconsistency) |
 
-### 13.7 The `backdrop-filter` contradiction — resolved
+### 13.8 The `backdrop-filter` contradiction — resolved
 
 M15 forbids glassmorphism, yet four live rules use `backdrop-filter: blur()`. **This document
 permits it in exactly one case:**
@@ -569,7 +649,6 @@ The conditions are strict:
 - **Never on a static element** — only on something that is actually sticky and floating.
 
 Everything else — a card, a chip, a modal, a static header — is forbidden.
-
 ---
 
 *Extracted without modifying a single byte of the source site.*
