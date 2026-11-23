@@ -1,0 +1,50 @@
+{
+  "file": "parity_hero_1439x739.png",
+  "size": [
+    1439,
+    739
+  ],
+  "shader_source": "parity_shader.glsl (verbatim from en/index.html, `fs` literal)",
+  "uniforms": {
+    "R": [
+      1439,
+      739
+    ],
+    "I": [
+      1440,
+      900
+    ],
+    "M": [
+      0.5,
+      0.5
+    ],
+    "t": 6.0,
+    "h": 0.0,
+    "A": 0.0,
+    "C": 4.0,
+    "P": 0.6,
+    "K": 1.0,
+    "B": 197.0
+  },
+  "texture": "img/hero_school.webp",
+  "texture_row_convention": "flip_texture_y=False (file row 0 == texture v=0)",
+  "output_colour_space": "Display-P3 (byte values), as in the GPU reference PNG",
+  "stats": {
+    "unique_colours": 896,
+    "paper_e9e7e1_pct": 81.5683,
+    "ink_0b0b0c_pct": 0.0,
+    "orange_pct": 5.1009
+  },
+  "reference_stats": {
+    "unique_colours": 795,
+    "paper_e9e7e1_pct": 82.1073,
+    "paper_e9e7e0_pct": 0.0874,
+    "ink_0b0b0c_pct": 0.0,
+    "orange_pct": 5.1074
+  },
+  "vs_reference": {
+    "mae_per_channel": 4.0181,
+    "max_channel_diff": 211,
+    "pixels_within_12_pct": 94.6715
+  }
+}
