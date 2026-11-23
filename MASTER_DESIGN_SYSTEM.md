@@ -651,4 +651,422 @@ The conditions are strict:
 Everything else — a card, a chip, a modal, a static header — is forbidden.
 ---
 
+## 14. Photography contract
+
+### 14.1 Principle
+
+> **A photograph enters the system only dithered and desaturated. Continuous tone is never shown
+> at rest.**
+
+The system is 1-bit (P1, P2). A continuous-tone photograph is a foreign object inside it: it
+carries values the field cannot represent, and it reads as a hole in the ink. The halftone is
+therefore not a stylistic filter applied to a photo — it is the **only permitted representation
+of a photo**.
+
+This is already the rule in the catalogue:
+
+> `visual-catalog.md:182` forbids "continuous-tone imagery outside the halftone pipeline".
+
+**Colour is the hover reward.** The photo arrives monochrome and quantised; full colour is
+what the visitor gets for interacting with it. Desaturation is the price of admission, and
+colour is the payoff.
+
+### 14.2 Mechanism — `<img>` + sibling `<canvas>`
+
+Every photograph is a two-layer construction:
+
+```html
+<img src="../img/x.webp" alt="…">
+<canvas></canvas>
+```
+
+- the `<canvas>` is a **dithered / halftoned copy** of the image, baked at build time;
+- the canvas is the **visible layer by default**;
+- `hover` / `focus` sets `canvas{opacity:0}`, revealing the real photograph underneath.
+
+So the resting state is the halftone, and the interactive state is the colour. The inversion is
+deliberate and is the whole point of the pattern.
+
+The bake lives in `en/index.html`:
+
+| Function | Purpose | Source |
+|---|---|---|
+| `bakeDither(img,bw,bh,cell,pos,lv,lev)` | bake a dithered copy of a bitmap into a canvas | `en/index.html:3526` |
+| `ditherInto(im,c,box,lv,o)` | draw the dithered copy into the sibling canvas | `en/index.html:3588` |
+| portrait bake | `bakeDither(focusCrop(im,FOC[n],104,130),52,65,1,[.5,.5],2,.6)` — a 52×65 cell grid | `en/index.html:4358` |
+
+### 14.3 Grayscale filters — verbatim
+
+| Selector | Filter | Source |
+|---|---|---|
+| `.por img` | `grayscale(1) contrast(.98) brightness(.96)` | `en/index.html:291` |
+| `.prv-b .g` | `grayscale(1) contrast(1.05) brightness(.92)` | `en/index.html:339` |
+| `.prf .fr img` | `grayscale(1) contrast(1.05)` | `en/index.html:361` |
+| `.plt img` | `grayscale(1) contrast(1.04)` | `en/index.html:494` |
+| `.wt img` | `grayscale(1) contrast(1.04)` | `en/index.html:640` |
+| reviewer avatar | `grayscale(1) contrast(1.05)` | `en/index.html:670`, `:697` |
+| video frame | `grayscale(1) contrast(1.05)` | `en/index.html:714`, `:1383` |
+| review face | `grayscale(1) contrast(1.05)` | `en/index.html:1695` |
+| author portrait | `grayscale(1) contrast(1.06)` + `aspect-ratio:4/3` | `en/index.html:2048`, `:2286` |
+| hero fallback | `grayscale(1);mix-blend-mode:multiply` | `en/index.html:205` |
+| node-card background | `grayscale(.25) contrast(1.15) blur(1px) scale(1.08)` → on hover `grayscale(0)` | `en/index.html:1896-1897` |
+
+De-grayscale on hover is explicit, not implicit:
+
+```css
+.por:hover img{filter:none}          /* :293 */
+.ap-n.on .plt img{filter:none}       /* :496 */
+#sops .sp-b:hover img{filter:none}   /* :1388 */
+```
+
+### 14.4 Mobile — pre-baked halftone PNG
+
+Touch has no hover, so the reveal gesture does not exist. On ≤600 px the canvas is removed and
+a **pre-baked halftone PNG** is served in its place:
+
+```js
+IMG = n => "../img/" + n + ".webp",
+PD  = n => "../img/wd" + n + ".png"   // PD — стена на телефоне: halftone, запечённая на сборке
+```
+
+`en/index.html:3301`
+
+```css
+@media(max-width:600px){
+  .wt canvas{display:none}
+  .wt i{opacity:1}
+}
+```
+
+`en/index.html:646`
+
+The mobile image is therefore the *halftone* as the final artefact, not the source photograph.
+
+### 14.5 Formats
+
+| Asset | Format |
+|---|---|
+| photographs | **webp only** |
+| pre-baked halftone (mobile) | png |
+| icons / logo | svg |
+| OG image | jpg |
+
+**There is no avif anywhere in the project.** Adding avif is forbidden — one raster format for
+photos, one fallback format for the baked halftone.
+
+### 14.6 `mix-blend-mode`
+
+`mix-blend-mode` is used **exactly three times** in the source, and **none of them is
+photographic**:
+
+| Use | Value | Source |
+|---|---|---|
+| hero background | `multiply` | `en/index.html:205` |
+| cursor trail | `difference` | `en/index.html:275` |
+| seam word | `difference` | `en/index.html:874` |
+
+### 14.7 Forbidden
+
+- showing a continuous-tone photo at rest;
+- applying `mix-blend-mode` to photography;
+- introducing avif;
+- cropping, recolouring or processing a photo outside the halftone pipeline.
+
+---
+
+## 15. Interaction states
+
+### 15.1 The interaction query — the rule
+
+> **Every `:hover` is wrapped in `@media (hover:hover)` (or `@media (hover:hover) and
+> (pointer:fine)`). Hover is never a mobile affordance.**
+
+There are roughly **45** such blocks in the source. This is not a stylistic preference: on a
+touch device a `:hover` rule latches to the last-tapped element, so an unwrapped hover state
+produces a stuck, mis-attributed highlight. The interaction query is what makes hover
+*honest*.
+
+### 15.2 Press vocabulary — two motions, and only two
+
+The source states the rule itself:
+
+> «нажатие — кнопки и ноды на 1 px вниз (у нод рамка 1 → 1,5 px), фото — scale(.99);
+> системная вспышка тапа выключена»
+>
+> `en/index.html:1005`
+
+Two **opposite** motions:
+
+| Class of target | Motion | Source |
+|---|---|---|
+| chrome — buttons, menu items, nodes | `transform:translateY(1px)`; nodes additionally `box-shadow:inset 0 0 0 1.5px var(--fg)` | `.h2t :is(.btn,.mb,…):active{transform:translateY(1px)}` `:1007`; `#h2t button.mn:active{…}` `:1010` |
+| photography — works wall, video frame | `transform:scale(.99)` (`.prv-b:active{scale(.995)}`, `#sops .sp-b:active{scale(.99)}`) | `.h2t :is(.wt,.vc .fr):active{transform:scale(.99)}` `:1011`; `:1239`; `:1389` |
+
+**Chrome presses down; photography shrinks.** These are not interchangeable — the direction
+carries the meaning (control = actuation, media = compression).
+
+> **Forbidden:** inventing a third press motion. A new target either joins the chrome family
+> (`translateY(1px)`) or the photography family (`scale(.99)`).
+
+### 15.3 Focus ring — canonical values and the honest override table
+
+The canonical ring is global:
+
+```css
+.h2t :focus-visible{outline:2px solid var(--fg);outline-offset:2px}   /* :86 */
+.h2t :focus:not(:focus-visible){outline:none}                          /* :87 */
+```
+
+> «доступность: общий фокус — 2 px цветом текста секции (крем на тьме, чернила на бумаге)»
+>
+> `en/index.html:85`
+
+**Canonical values: `outline: 2px solid` + `outline-offset: 2px`, colour = the section's text
+colour** — `--fg` on dark, `--ink` on paper.
+
+Seven component-level overrides exist. They are recorded here rather than hidden:
+
+| # | Selector | Deviation | Source | Status |
+|---|---|---|---|---|
+| 1 | `.rx :focus-visible` | colour via `--rx-ink`, offset custom | `:1637` | permitted exception — section-specific ink |
+| 2 | `.rx .rx-ru:focus-visible` | `outline-offset:0` | `:1717` | must-fix — arbitrary offset |
+| 3 | `#sops .sp-t:focus-visible` | `outline-offset:-4px` | `:1371` | must-fix — arbitrary offset |
+| 4 | `.tls button:focus-visible` | `outline-offset:-2px` | `:940` | must-fix — arbitrary offset |
+| 5 | `.qa-r:focus-visible` | `outline-offset:-2px` | `:676` | must-fix — arbitrary offset |
+| 6 | `.wt:focus-visible` | `outline-offset:-3px`, `z-index:3` | `:942` | permitted exception — inset ring on full-bleed media |
+| 7 | `.f-net3 .n3-q button:focus-visible` | `2px solid var(--ink)` + `outline-offset:-4px` | `:1455` | must-fix — arbitrary offset |
+
+**Rule:** offsets may deviate **only** where the ring must sit inside a full-bleed media element
+(the inset ring). Every other offset is a **must-fix**. A component may change the ring's
+*colour* when the section's ink differs; it may not invent a geometry.
+
+### 15.4 Disabled and loading — an honest gap
+
+There is exactly **one** `:disabled` rule in the whole source:
+
+```css
+#sops .sp-bt:disabled{opacity:.3;cursor:default}   /* :1355 */
+```
+
+There is **no** `[aria-disabled]`, **no** `.is-loading`, **no** spinner, and **no** loading
+vocabulary of any kind.
+
+**Forward rule:**
+
+> **A disabled control is `opacity:.3` + `cursor:default` and nothing else.** A loading state
+> must be expressed in the system's own register — a mono label or a counter — **never a
+> spinner.** The system is an instrument readout; instruments do not spin.
+
+### 15.5 Touch targets
+
+Six explicit minimums exist in the source:
+
+| Selector | Minimum | Source |
+|---|---|---|
+| `.skip` | `height:44px` | `:89` |
+| `.wl-f button` | `min-height:44px` | `:634` |
+| `.ft-l a` | `min-height:44px` | `:832` |
+| `.nio` | `width:44px;height:44px` | `:465` |
+| `.mnu li a` | `min-height:56px` | `:197` |
+| `.inp button` | `min-height:48px` | `:425` |
+
+**Rule: 44 px minimum for any pointer target, 48 px for inputs, 56 px for menu rows.**
+
+### 15.6 Boolean state classes
+
+| Class | Meaning |
+|---|---|
+| `.on` | selected |
+| `.open` | expanded |
+| `.stuck` | nav scrolled past the seam |
+| `.aft` | after the seam / subsequent state |
+| `.lt` | nav over paper |
+| `.dv` | network dived (§16.3) |
+| `.rt` | active route |
+| `.paused` | flow paused |
+| `.in` | active / engaged |
+| `.mo` | modal / overlay state |
+
+**Rule: state is a class on the element, never an inline style.** Inline `style=` for state
+breaks the cascade contract and makes state un-inspectable.
+
+---
+
+## 16. Network diagram language
+
+### 16.1 Principle
+
+> **The network is a diagram, not decoration. It borrows TouchDesigner's editor vocabulary
+> literally** — nodes, ports, flags, wires, operators, families.
+
+### 16.2 Substrate — the 20 px dot grid
+
+```css
+.nw{background:radial-gradient(circle at 1px 1px,rgba(239,238,233,.09) 1px,transparent 1.4px) 0 0/20px 20px,var(--ink-100)}
+```
+
+`en/index.html:384`
+
+On paper the substrate inverts:
+
+```css
+.gr .nw{background:…rgba(11,11,12,.13)… #d3d0c7}
+```
+
+`en/index.html:844`
+
+The dot pitch is **20 px** — one dot per 20 px cell, inverted on paper. It is a field, not a
+background image.
+
+### 16.3 Dive — the invariant
+
+```css
+.nw-o{transition:transform .6s cubic-bezier(.22,1,.36,1),opacity .2s linear}  /* :385 */
+.nw.dv .nw-o{transform:scale(2.4);opacity:0}                                  /* :386 */
+.nw-i{opacity:0;transform:scale(.6)}                                         /* :387 */
+.nw.dv .nw-i{opacity:1;transform:none}                                        /* :388 */
+```
+
+> «внешний гаснет, внутренний проявляется одновременно и линейно — **сумма непрозрачностей =
+> 1 в каждом кадре**»
+>
+> `en/index.html:387`
+
+**This is the most important rule in the section.** The dive is a **two-level zoom**: the outer
+layer scales to `scale(2.4)` and fades out while the inner layer rises from `scale(.6)` to
+`scale(1)` and fades in. Because both transitions run over the same window, the **sum of opacities = 1 in every frame** — no frame of transparency loss, no flash of empty field.
+
+> **Forbidden:** any cross-dissolve that breaks the sum-of-opacities invariant. If the two
+> layers do not sum to 1 at every frame, the dive is wrong.
+
+The dive is triggered by **29** `.n3-dv[data-dive]` buttons, each carrying `aria-expanded`.
+
+### 16.4 Wires
+
+Wires are SVG `<path>` elements inside `.mp-w`, classified by class:
+
+| Class | Meaning | Evidence |
+|---|---|---|
+| `rt` | active route | `.nw.rt .mp-w path:not(.rt){opacity:.16}` `:451` |
+| `ck` | checkered / flowing dashes | the flow animation |
+| `fl` | branch / flag | flag geometry (§16.6) |
+| `pu` | pulse, on/off | `path.pu.on{opacity:1}` `:1226` |
+
+When the network is paused, the flow pauses with it:
+
+```css
+.nw.paused .mp-w path{animation-play-state:paused}   /* :398 */
+```
+
+### 16.5 Ports — exactly two sizes
+
+| Size | Form | Source |
+|---|---|---|
+| **9 px** | ring, `box-shadow:inset 0 0 0 1.5px` | `.pn.full::before/::after` `:165-166`; `.f-net3 .n3-io::before` `:1529` |
+| **44 px** | `.nio{width:44px;height:44px;inset 0 0 0 1.5px var(--fg)}` | `:465` |
+
+**There is no third port size.** A new port is either a node port (9 px) or a control-sized
+port (44 px).
+
+### 16.6 Flags
+
+```css
+.pn>.ph .fl b{width:16px;height:16px;border-radius:2px;inset 0 0 0 1px var(--line2)}  /* :159 */
+.fl b.on{background:var(--td);color:var(--ink-000);box-shadow:none}                   /* :160 */
+```
+
+Flags are **16 px**, and when lit they fill with `--td`. Below 600 px the flag is hidden
+entirely: `.pn>.ph .fl{display:none}` `:169`.
+
+### 16.7 Panel chrome tiers
+
+| Tier | Contents |
+|---|---|
+| `.pn` | header `.ph` + footer `.pf` |
+| `.pn.full` | `.pn` + ports + flags |
+| `.pn.lite` | header line only (`:150` comment) |
+
+### 16.8 Colour
+
+> **Family colour = `op.color`.** Hou2Touch → SOP, Extreme I/II → CHOP, GLSL → TOP, route1 →
+> DAT.
+
+`:1124`. Cross-ref **§13.4 — colour encodes family, never state**. A wire does not turn red
+because it is wrong; it turns because it belongs to another operator family.
+
+---
+
+## 17. Responsive behaviour
+
+### 17.1 The breakpoints actually in use
+
+**600, 601, 900, 980/981, 1100, 1180, 1320/1321, 1360.**
+
+| Range | What actually changes | Source |
+|---|---|---|
+| **≤600** | `:root{--sec:96px;--hgap:40px;--pgap:16px}`; `.only-d{display:none}`; `.H`/`.dek` step down one scale step; `.btn.pill{height:52px}`; `.pn>.ph .fl{display:none}`; works wall `repeat(4,1fr)`; `.wt{aspect-ratio:4/3}`; **`.wt canvas{display:none}`, `.wt i{opacity:1}`**; `.hero h1{--fs-2xl}`, `.lead{--fs-m}` | `:75`, `:104`, `:137`, `:148`, `:169`, `:646`, `:243` |
+| **601–980** | `.hf-l, .hero .hr{grid-column:1/-1}`; `.hero .hm{repeat(3,1fr)}`; `.hero .hm>div:nth-child(n+4){display:none}`; `.au-p{1/6}`, `.au-t{6/13}` | `:232`, `:315` |
+| **≤900** | the network collapses | `:532` |
+| **≤980** | nav → `1fr auto`; `.nav ul, .nav .end .snd{display:none}`; `.nav .mb{display:inline-flex}`; `.tlb{display:none}`; `.prv/.prf/.pri` all `grid-column:1/-1` with reorder `.pri{grid-row:2}`, `.prf{grid-row:3}` | `:190`, `:264`, `:368` |
+| **901–1360** | `.nw{min-height:606→520px}` | `:531` |
+| **≥981** | `.f-nav1 .nav.stuck ul{display:none}`; `.nav.stuck{padding-block:6px}`; `.ft-l .hint{display:inline}` | `:910`, `:834` |
+| **≤1100** | `.nav ul a{padding:0 9px}` | `:189` |
+| **601–1180** | `.hero h1{--fs-2xl}`, `.lead{--fs-m}` | `:231` |
+| **601–1320** | `.cs{grid-template-columns:1fr 1fr}`; `#c-h2t{span 2}` | `:607` |
+| **≥1321** | `#c-h2t{grid-column:span 2}` | `:574` |
+
+### 17.2 Device-only naming
+
+| Class | Meaning |
+|---|---|
+| `.only-d` | shown on desktop, hidden ≤600 |
+| `.only-m` | shown on mobile, hidden ≥601 |
+
+`en/index.html:104`, `:105`
+
+### 17.3 Type scale is not redefined
+
+> **The type scale is NOT redefined per breakpoint.** Tokens are swapped at component level —
+> e.g. `.hero h1{--fs-2xl}` reassigns the token on that element; the scale itself does not
+> change.
+
+A breakpoint may re-point a token. It may not introduce a new size.
+
+### 17.4 Ownership
+
+> **This section is the owner of responsive behaviour.**
+
+`MASTER_DESIGN_SYSTEM.md` previously claimed that `layout-grid.md` contains the responsive
+rules. **It does not.** The grid document carries the 12-column grid and the gutter vocabulary
+only; every breakpoint rule lives here, in §17.
+
+---
+
+## 18. Recorded defects
+
+Observed in the live source. Statuses are owner decisions.
+
+| # | Defect | Fact | Status |
+|---|---|---|---|
+| **D1** | `--dim:#5a5956` | contrast ≈ **3.2:1** on `#0b0b0c` — below WCAG AA (4.5:1). It is the only sub-AA pair: `--mute:#8f8e8a` ≈5.3:1 passes, `--txt:#cfcec9` ≈12:1, `--fg:#efeee9` ≈17:1, paper/ink ≈17:1 | **must-fix** |
+| **D2** | `--sand:#b8a88a` | declared but **explicitly unused** — the comment at `:1124` states that «песок» is not used. A dead token | **must-remove** |
+| **D3** | tablists | `role="tablist"` and `aria-selected` are present, but there is **no `aria-controls`** and **no `role="tabpanel"`** on `#prF` / `#qaL` | **must-fix** |
+| **D4** | reduced-motion | handled **per-module in 6+ separate blocks**, not globally; and `motion-principles.md:107` records an owner decision (20.11.2026) to **remove** the freeze, while `video-production-guidelines.md:35` states "the band always animates — there is no reduced-motion freeze". Deliberate — but never stated as a rule | **accepted decision** |
+| **D5** | `prefers-color-scheme` | **zero occurrences** in the source. The theme is positional (`.paper` / `.dk` section classes), not OS-driven. A decision, not an oversight | **accepted decision** |
+| **D6** | `main:focus{outline:none}` | `:91` kills the focus ring on the skip-link target | **must-fix** |
+
+### 18.1 Forward rules that fall out of the defects
+
+- **D1** — any text token must measure ≥ 4.5:1 against its own field before it ships.
+- **D2** — a token that no rule consumes is removed, not left in the palette as an option.
+- **D3** — a tablist is incomplete without `aria-controls` on the tab and `role="tabpanel"` on
+  the panel.
+- **D4** — the reduced-motion policy is stated once, globally, and the per-module blocks are
+  reconciled with it.
+- **D5** — the theme is positional; an OS-driven dark mode is out of scope unless stated
+  otherwise.
+- **D6** — the skip-link target must keep its focus ring.
+
+---
+
 *Extracted without modifying a single byte of the source site.*

@@ -119,6 +119,56 @@ if (!master.includes('окно TouchDesigner на бумаге')) fails.push(`${
 // 19 — the wrong framing is gone
 if (/stamp on paper/i.test(master)) fails.push(`${MASTER} still contains the removed "stamp on paper" framing`);
 
+// 20 — §14 photography contract
+if (!master.includes('## 14.') || !master.includes('Photography contract')) {
+  fails.push(`${MASTER} has no "## 14. Photography contract" section`);
+}
+
+// 21 — §15 interaction states
+if (!master.includes('## 15.') || !master.includes('Interaction states')) {
+  fails.push(`${MASTER} has no "## 15. Interaction states" section`);
+}
+
+// 22 — §16 network diagram language
+if (!master.includes('## 16.') || !master.includes('Network diagram language')) {
+  fails.push(`${MASTER} has no "## 16. Network diagram language" section`);
+}
+
+// 23 — §17 and §18
+if (!master.includes('## 17.') || !master.includes('## 18.')) {
+  fails.push(`${MASTER} has no "## 17." / "## 18." headings`);
+}
+
+// 24 — the dive invariant
+if (!master.includes('sum of opacities') || !master.includes('scale(2.4)')) {
+  fails.push(`${MASTER} does not state the dive invariant (sum of opacities / scale(2.4))`);
+}
+
+// 25 — the interaction query
+if (!master.includes('hover:hover')) {
+  fails.push(`${MASTER} does not state the hover:hover interaction query`);
+}
+
+// 26 — the two press motions
+if (!master.includes('translateY(1px)') || !master.includes('scale(.99)')) {
+  fails.push(`${MASTER} does not state both press motions (translateY(1px) / scale(.99))`);
+}
+
+// 27 — touch targets and the mobile pre-baked halftone
+if (!master.includes('44 px') || !master.includes('pre-baked')) {
+  fails.push(`${MASTER} is missing the 44 px touch minimum or the pre-baked halftone fallback`);
+}
+
+// 28 — the D1 contrast defect
+if (!master.includes('--dim') || !master.includes('3.2:1')) {
+  fails.push(`${MASTER} does not record the --dim contrast defect (3.2:1)`);
+}
+
+// 29 — the D5 prefers-color-scheme decision
+if (!master.includes('prefers-color-scheme') || !/zero occurrences|no occurrences/.test(master)) {
+  fails.push(`${MASTER} does not record the prefers-color-scheme zero occurrences decision`);
+}
+
 if (fails.length) {
   console.log(`GATE_FAIL: ${fails.length} check(s) failed`);
   for (const f of fails) console.log(`  - ${f}`);
