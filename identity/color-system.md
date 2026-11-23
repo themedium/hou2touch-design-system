@@ -31,7 +31,7 @@ So course landing pages are **paper-first**; the dark shell is the marketing/uti
   --fg:#efeee9; --fg8:rgba(239,238,233,.8); --txt:#cfcec9; --mute:#8f8e8a; --dim:#5a5956;
   --line:rgba(239,238,233,.11); --line2:rgba(239,238,233,.22);
   --hou:#e5501e; --td:#7fe7ff;
-  --sop:#3d7fd6; --top:#8a63c9; --chop:#45a654; --dat:#c34f9a; --comp:#9a9a96; --sand:#b8a88a;
+  --sop:#3d7fd6; --top:#8a63c9;/*RU legacy — retired 2026-11*/ --chop:#45a654; --dat:#c34f9a; --comp:#9a9a96; --sand:#b8a88a;
   --pad:clamp(16px,3.9vw,56px); --gap:clamp(10px,1.4vw,20px);
   --disp:"H2T Bebas","Bebas Neue",Impact,sans-serif;
   --sans:"Inter Tight",system-ui,sans-serif;
@@ -40,6 +40,11 @@ So course landing pages are **paper-first**; the dark shell is the marketing/uti
 }
 ```
 (`src/template.html:38-48`; line 44 not printed in the extraction — treat any `--hgap/--pgap` there as ESTIMATED.)
+
+**Note on `--top`.** The block above is quoted verbatim from `src/template.html`, which is the **RU-legacy**
+shell; its `--top` is the retired RU-legacy purple `#8a63c9`. The **canonical** `--top` is **`#65a30d`** (green) —
+the value the 33 published EN pages carry. `tools/pipeline/publish.py` marks the RU legacy pages
+(`index.html`, `school.html`, `src/template.html`, `courses/*`) as `noindex`. Keep `#8a63c9` documented as legacy so old screenshots remain explicable; never use it in new work.
 
 ### Role assignment (MEASURED mapping, roles inferred from usage)
 
@@ -77,11 +82,12 @@ TouchDesigner operator families are colour-coded. This is the site's structural 
 | Family | Token | Value | Source |
 |---|---|---|---|
 | CHOP | `--chop` | `#45a654` | `src/template.html:42` |
-| TOP | `--top` | `#8a63c9` | `src/template.html:42` |
+| TOP | `--top` | `#65a30d` | **canonical** — the 33 published EN pages |
 | SOP | `--sop` | `#3d7fd6` | `src/template.html:42` |
 | DAT | `--dat` | `#c34f9a` | `src/template.html:42` |
 | COMP | `--comp` | `#9a9a96` | `src/template.html:42` |
 | — | `--hou` | `#e5501e` | brand orange, **not** a family |
+| TOP (RU legacy, retired 2026-11) | `--top` | `#8a63c9` | RU legacy set only (`index.html`, `school.html`, `src/template.html`, `courses/*`; marked `noindex` by `tools/pipeline/publish.py`) |
 | — | `--sand` | `#b8a88a` | warm neutral |
 
 Rules:

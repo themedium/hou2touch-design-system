@@ -4,8 +4,15 @@
 
 ---
 
-## 1. The single easing
+## 1. The easing vocabulary — three curves, three roles
 
+| Token | Curve | Role | Band |
+|---|---|---|---|
+| `--ease` | `cubic-bezier(.19,1,.22,1)` | general — the default for everything that moves | 0.3–1.4 s |
+| `--rx-em` | `cubic-bezier(.22,1,.36,1)` | entrance — elements arriving | 0.3–1.4 s |
+| `--rx-es` | `cubic-bezier(.2,0,0,1)` | exit / state change | 0.16–0.25 s |
+
+The general curve is quoted in both files:
 ```css
 --ease:cubic-bezier(.19,1,.22,1);
 ```
@@ -17,8 +24,11 @@ This is a strong ease-out with a tiny initial push:
   not present; rather, the curve leaves the origin fast).
 - `x2 = .22` → the control point near the target is at 22 % of the duration, so the last stretch is long.
 
-**Every animated thing in the site uses `var(--ease)` or a plain `.3s`/`.8s` linear default.**
-There is no second bezier, no spring, no `steps()`, no custom cubic-bezier per component.
+**Every animated thing in the site uses one of the three curves above, or a plain `.3s`/`.8s` linear
+default.** Three curves are the whole vocabulary: there is no spring, no `steps()`, no per-component
+custom cubic-bezier. The entrance and exit curves are a deliberate decision, recorded in the source
+(`en/index.html:1206` — "реш. 9 … 120 мс cubic-bezier(.2,0,0,1)"), not an accident. The canonical
+statement of the three roles lives in `MASTER_DESIGN_SYSTEM.md §2.4`.
 
 Exceptions that do **not** use `var(--ease)` (MEASURED):
 - `transition:background .3s,color .3s` on `.sq` (`src/template.html:353`) — linear 300 ms.
@@ -37,8 +47,11 @@ Exceptions that do **not** use `var(--ease)` (MEASURED):
 | **1.1 s** | numeral + display-title letter rise | `hero:113` |
 | **1.4 s** | hero canvas clip-path wipe | `hero:119` |
 | **1.65 s** | mask bake delay after fonts ready | `hero:826` |
+| **0.16 / 0.18 / 0.24 / 0.25 s** | exits and state changes (`--rx-es`) | live EN set |
 
-Nothing animates faster than 0.3 s and nothing slower than 1.4 s (except the 1.65 s mask bake).
+State transitions live between 0.3 s and 1.4 s. Outside that band there are only the named exceptions:
+exits (0.16–0.25 s), the 1.65 s mask bake, and the continuous loops — the marquee, the 1.4 s dashed-path
+cycle and the loupe orbit (37 s / 48 s). The loops are not transitions and never were.
 
 ---
 
@@ -175,8 +188,10 @@ disturbance is always damped and always radial.
 
 ## 7. Motion rules for new work
 
-1. **One easing.** `cubic-bezier(.19,1,.22,1)` for everything that moves; `.3s` linear only for hover colour.
-2. **Durations live in the 0.3–1.4 s band.** Below .3 s feels cheap; above 1.4 s feels slow.
+1. **Three easings, by role.** `--ease` (general), `--rx-em` (entrance), `--rx-es` (exit / state change).
+   A fourth curve is forbidden; `.3s` linear is allowed only for hover colour.
+2. **State transitions live in the 0.3–1.4 s band.** Below .3 s feels cheap; above 1.4 s feels slow. The
+   named exceptions are exits (0.16–0.25 s), the mask bake (1.65 s) and the continuous loops.
 3. **Reveals are one-shot** and triggered by a 10 %-inset IntersectionObserver.
 4. **Type rises, it does not fade.** Rise = `translateY(100%)` → `0` from a clipped box.
 5. **Generative fields never stop.** They are time functions, not timelines.

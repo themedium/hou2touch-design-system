@@ -16,7 +16,7 @@ SURFACE
 - Ink: #0b0b0c. Secondary text on paper: #2b2a28. Muted labels: #6d6b65. Dim: #9a988f.
 - Hairlines on paper: rgba(11,11,12,.12) (.line) and rgba(11,11,12,.28) (.line2).
 - Exactly ONE accent colour, taken from the TouchDesigner node families:
-  CHOP #45a654 | TOP #8a63c9 | SOP #3d7fd6 | DAT #c34f9a | COMP #9a9a96.
+  CHOP #45a654 | TOP #65a30d | SOP #3d7fd6 | DAT #c34f9a | COMP #9a9a96.
   Brand orange #e5501e is reserved for the CTA hover and the brand square — never as a field.
 - The accent occupies at most 5% of the frame and never fills a large area.
 
@@ -55,8 +55,8 @@ OBJECTS
 - Cards: radius 6px, 1px border. Tags: radius 2px, height 24px, inset 1px ring.
 
 MOTION (if the composition moves)
-- One easing only: cubic-bezier(0.19, 1, 0.22, 1).
-- Durations: 0.3s colour hover, 0.4s indicator rotate, 0.8s block reveal, 1.1s type rise, 1.4s band wipe.
+- Three named easings, by role: cubic-bezier(0.19, 1, 0.22, 1) general | cubic-bezier(0.22, 1, 0.36, 1) entrance | cubic-bezier(0.2, 0, 0, 1) exit and state change. Never a fourth.
+- Durations: 0.3s colour hover, 0.4s indicator rotate, 0.8s block reveal, 1.1s type rise, 1.4s band wipe. Named exceptions: exits 0.16-0.25s, mask bake 1.65s; continuous loops are not transitions.
 - Type rises from translateY(105%) out of a clipped box, with a 0.05s stagger between glyphs.
 - Large surfaces wipe in with clip-path inset(), never a cross-dissolve.
 - The field animates continuously from t = 6.0 (never a dead first frame) at 0.72x speed.
@@ -198,7 +198,7 @@ Before accepting any composition, check it against these seven questions. They a
 3. **Does the dot pitch sit on a 16 px grid?** (8 × the 2 px cell.)
 4. **Is the type exactly three voices — Bebas caps, Inter Tight sentence, JetBrains Mono labels?**
 5. **Is the grid 12 columns with 3.9 % margins and 1.4 % gutters?**
-6. **Is there exactly one easing and are all durations between 0.3 s and 1.4 s?**
+6. **Is every easing one of the three named curves, and are all state-transition durations between 0.3 s and 1.4 s?**
 7. **Is the accent under 5 % of the frame, and is the text on paper exactly #0b0b0c?**
 
 If any answer is "no", the composition is in the neighbourhood of the system but not in it.

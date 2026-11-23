@@ -35,7 +35,7 @@ this is a catalogue of *elements*, with the exact spec of each.
 | C-09 | Sand | `#b8a88a` | `template:42` |
 | C-10 | Carmine | `#b3122e` | `build.py:115` |
 | C-11 | CHOP | `#45a654` | `template:42` |
-| C-12 | TOP | `#8a63c9` | `template:42` |
+| C-12 | TOP | `#65a30d` | canonical (live EN set); `#8a63c9` is the RU legacy, retired 2026-11 |
 | C-13 | SOP | `#3d7fd6` | `template:42` |
 | C-14 | DAT | `#c34f9a` | `template:42` |
 | C-15 | COMP | `#9a9a96` | `template:42` |

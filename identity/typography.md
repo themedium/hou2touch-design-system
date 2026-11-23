@@ -82,6 +82,15 @@ if '--fs-2xs:' not in t:
 | `--fs-6xl` | 88 | section headline |
 | `--fs-7xl` | 112 | hero display |
 
+**Active use vs defined-but-unused.** `FS_SCALE` defines **twelve** steps (11 → 112 px), while the site
+header comment claims "6 ступеней" — the real scale is wider than that comment says. **In active use:**
+`--fs-2xs` (11 px, mono micro-labels), `--fs-xs` (12 px, tags/chips), `--fs-s` (14 px, secondary),
+`--fs-m` (16 px, body). **Defined but not observed in active use** on the pages inspected: `--fs-l`
+(20), `--fs-xl` (24), `--fs-2xl` (28), `--fs-3xl` (32), `--fs-4xl` (40), `--fs-5xl` (56) — the large
+display sizes are handled by the fluid clamps in §3.2 / §3.3, not by these static steps. Keep all twelve
+defined (a new composition may use them), but do not treat the unused six as part of the live
+vocabulary.
+
 Line heights: `--lh-tight:1.15` for display headings, `--lh-body:1.5` for body.
 Radius `--card-r:6px`, chip height `--chip-h:24px`, brand hover `--hou-hover:#f0602d`.
 

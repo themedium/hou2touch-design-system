@@ -145,7 +145,7 @@ With `.08` at 60 fps, the time constant is ≈ `1/.08 ≈ 12.5 frames ≈ 208 ms
 
 ## 8. Transition vocabulary rules
 
-1. **One easing** — `cubic-bezier(.19,1,.22,1)`. Hover colour changes are the only linear exceptions.
+1. **Three named easings, by role** — `cubic-bezier(.19,1,.22,1)` general, `cubic-bezier(.22,1,.36,1)` entrance, `cubic-bezier(.2,0,0,1)` exit / state change. Hover colour changes are the only linear exceptions.
 2. **Longest transition = largest surface** (canvas 1.4 s, type 1.1 s, blocks .8 s, indicators .4 s,
    colours .3 s).
 3. **Clip, don't scale, anything that is pixel-dithered.**

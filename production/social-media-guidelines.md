@@ -123,7 +123,7 @@ CTA pair (filled ink + ghost, both 52 px pills).
 |---|---|
 | Background | `#e9e7e0` (paper) |
 | Text | `#0b0b0c` |
-| Family accent | `--chop #45a654`, `--top #8a63c9`, `--sop #3d7fd6`, `--dat #c34f9a`, `--comp #9a9a96` |
+| Family accent | `--chop #45a654`, `--top #65a30d`, `--sop #3d7fd6`, `--dat #c34f9a`, `--comp #9a9a96` |
 | Brand CTA | `#e5501e` |
 
 **Never** place a family colour on a large area, and never use more than one family colour per post.

@@ -30,7 +30,7 @@ Landing sections use the identical structure without the `.wrap` class:
 | `--gap` | `clamp(10px,1.4vw,20px)` | `template:43` (site gutter) |
 | section padding block | `clamp(56px,8vw,128px)` | `landing.css` |
 
-Note the naming split: **`--gut` in the hero mock, `--gap` in the site template** — same value, different names.
+Note the naming split: **`--gut` in the hero mock and the published pages, `--gap` in the site template** — same 1.4 % rate, different minimum (12 px vs 10 px), different names. Both clamp to a 20 px ceiling: above a ~1429 px viewport the gutter is a fixed 20 px, not 1.4 %. `--pad` likewise ceilings at 56 px above ~1436 px.
 The hero band top tick rail uses its own gap: `.band .tk{display:grid;grid-template-columns:repeat(12,1fr);column-gap:var(--gut)}` (`hero:73`).
 
 ---

@@ -207,7 +207,7 @@ does not introduce a single new motion value.
 | Smooth gradients in the field | The system is 1-bit | Threshold against Bayer |
 | Colour bleeding over bare paper | Accent must be inside ink | `m.y>.5 && m.x>th*.6` |
 | Blurring or scaling the dither canvas | destroys the pixel grid | nearest upscaling only |
-| A spring or bounce ease | one easing only | `cubic-bezier(.19,1,.22,1)` |
+| A spring or bounce ease | three named easings, never a fourth | `--ease` / `--rx-em` / `--rx-es` |
 | Random per-frame noise | ordered dither is deterministic | Bayer / hash-seeded |
 | A colour field larger than the accent chip | accent is ≤ 5 % of the frame | keep it sparse |
 | Text on paper that is not `#0b0b0c` | contrast rule | ink only |

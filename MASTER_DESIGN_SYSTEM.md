@@ -18,7 +18,7 @@ Five pillars, each with a hard constraint:
 | Pillar | Hard constraint | Source of truth |
 |---|---|---|
 | **P1 — Ink & paper** | Two values only: `#0b0b0c` on `#e9e7e0`. No continuous tone. | `src/template.html:38`, `tools/hero_index_mock.html:213` |
-| **P2 — Ordered dither** | 8×8 Bayer, evaluated per cell (2 CSS px fine / 3 coarse). Dot pitch 16 px. | `hero:206, 224-226, 299` |
+| **P2 — Ordered dither** | 8×8 Bayer, evaluated per cell (2 CSS px fine / 3 coarse). Dot pitch = CELL × 8 → **16 px** (fine) / **24 px** (coarse). | `hero:206, 224-226, 299` |
 | **P3 — One family colour** | Exactly one of CHOP/TOP/SOP/DAT/COMP per composition. ≤ 5 % coverage. | `template:42`, `hero:303-304` |
 | **P4 — Three type voices** | Bebas caps / Inter Tight sentence / JetBrains Mono labels. Never mixed. | `template:45-47` |
 | **P5 — Instrument surface** | Every mark is a label, a tick, a rule or a counter. | `hero:308-322`, `template:83,138`, `landing.css` |
@@ -36,16 +36,29 @@ Five pillars, each with a hard constraint:
 | M3 | Cell size | 2 CSS px (fine) / 3 CSS px (coarse) |
 | M4 | Upscale | integer factor, nearest neighbour, `image-rendering:pixelated` |
 | M5 | Accent rule | colour only where `ink > th*.6` |
-| M6 | One family colour per composition | `#45a654` / `#8a63c9` / `#3d7fd6` / `#c34f9a` / `#9a9a96` |
-| M7 | Grid | 12 columns, `--pad` 3.9 %, `--gut` 1.4 % |
+| M6 | One family colour per composition | `#45a654` / `#65a30d` / `#3d7fd6` / `#c34f9a` / `#9a9a96` |
+| M7 | Grid | 12 columns; `--pad:clamp(16px,3.9vw,56px)`; gutters `--gut:clamp(12px,1.4vw,20px)` (hero / landing) **and** `--gap:clamp(10px,1.4vw,20px)` (site template) — two token names, one 1.4 % rate |
 | M8 | Display type | H2T Bebas, UPPER, `lh .8`, tracking ≈ 0, optical left-pull |
 | M9 | Text type | Inter Tight 400/500/600, tracking −.015…−.035em, measure ≤ 66ch |
 | M10 | Label type | JetBrains Mono 500, 10–12 px, +.07em, UPPER |
-| M11 | Easing | `cubic-bezier(.19,1,.22,1)` — only |
-| M12 | Durations | 0.3 / 0.4 / 0.5 / 0.8 / 1.1 / 1.4 s |
+| M11 | Easing | exactly three named curves, by role — see §2.4 |
+| M12 | Durations | state transitions 0.3–1.4 s (0.3 / 0.4 / 0.5 / 0.8 / 1.1 / 1.4); named exceptions: exits 0.16–0.25 s, mask bake 1.65 s; continuous loops are not transitions |
 | M13 | Radius vocabulary | 2 px (chips), 6 px (cards), 999 px (pill CTA only) |
 | M14 | Rules | 1 px hairlines; `--line` for internal, `--ink` for the outer frame of a chain |
 | M15 | No gradients / shadows / glow / glassmorphism | — |
+
+**TOP colour (canonical).** The canonical `--top` is **`#65a30d`** (green) — the value carried by the
+33 published EN pages. `#8a63c9` (purple) was the **RU-legacy** value, retired 2026-11: the RU legacy
+set (`index.html`, `school.html`, `src/template.html`, `courses/*`) still declares it, and
+`tools/pipeline/publish.py` marks those pages `noindex`. `#8a63c9` stays documented as legacy so that
+old screenshots remain explicable — never use it in new work.
+
+**Grid tokens.** There are two gutter token names and they are not interchangeable in the source:
+`--gut:clamp(12px,1.4vw,20px)` in ~50 published and hero HTML files, `--gap:clamp(10px,1.4vw,20px)`
+in `src/template.html`. Same 1.4 % rate, different minimum (12 px vs 10 px). Both **clamp to a
+ceiling**: the gutter ceiling (20 px) engages above a ~1429 px viewport, and the margin ceiling
+(`--pad`, 56 px) above ~1436 px — from there on the gutters and the margins are **fixed pixels**, not
+a percentage of the viewport.
 
 ### 2.2 MAY VARY — the freedom of the system
 
@@ -70,7 +83,7 @@ Five pillars, each with a hard constraint:
 | X2 | A second accent colour |
 | X3 | Continuous-tone imagery inside a generative field |
 | X4 | Stochastic/film grain instead of ordered dither |
-| X5 | A second easing curve |
+| X5 | A **fourth** easing curve — the three named curves in §2.4 are the whole vocabulary |
 | X6 | Cross-dissolves |
 | X7 | Inter Tight at weight 700 |
 | X8 | A third typeface |
@@ -78,6 +91,35 @@ Five pillars, each with a hard constraint:
 | X10 | Resampling the dither (downscale a full-res render) |
 | X11 | Colour used as the only information channel |
 | X12 | Emoji / illustrative stickers |
+
+### 2.4 The easing vocabulary — three curves, three roles
+
+| Token | Curve | Role | Duration band |
+|---|---|---|---|
+| `--ease` | `cubic-bezier(.19,1,.22,1)` | **General** — the default for everything that moves | 0.3–1.4 s |
+| `--rx-em` | `cubic-bezier(.22,1,.36,1)` | **Entrance** — elements arriving (rise-and-fade, masked type rise) | 0.3–1.4 s |
+| `--rx-es` | `cubic-bezier(.2,0,0,1)` | **Exit / state change** — elements leaving or swapping state | 0.16–0.25 s (120–240 ms) |
+
+The general curve is the one quoted in `src/template.html:48` and `tools/hero_index_mock.html:32`.
+The third curve is a deliberate decision, not a slip — it is recorded in the source as a 120 ms
+`cubic-bezier(.2,0,0,1)` for state change (`en/index.html:1206`). A **fourth** curve is forbidden (X5):
+three is the whole vocabulary, and each curve has exactly one job.
+
+### 2.5 The duration vocabulary
+
+State transitions live in **0.3–1.4 s**: 0.3 / 0.4 / 0.5 / 0.8 / 1.1 / 1.4 s.
+
+Named exceptions — deliberately outside the band, and each of them named:
+
+| Duration | What | Why it exists |
+|---|---|---|
+| 0.16 / 0.18 / 0.24 / 0.25 s | **Exits** — elements leaving, state changes | a state change should feel immediate, not stately |
+| 1.65 s | **Mask bake** delay after `document.fonts.ready` | the halo has to land together with the letters |
+| 1.4 s (loop) | the **dashed-path** cycle | a continuous loop, not a transition |
+| 37 s / 48 s | the **loupe orbit** periods | continuous loops, not transitions |
+| continuous | the **marquee** scroll | a loop, not a transition |
+
+Only the first two rows are transitions; the rest are continuous motion.
 
 ---
 
@@ -87,10 +129,10 @@ A composition belongs to the system if **all seven** answers are "yes":
 
 1. Is the field 1-bit plus at most one accent?
 2. Is the dither **ordered** (a regular 8×8 dot matrix), not stochastic?
-3. Does the dot pitch sit on a 16 px grid (8 × the 2 px cell)?
+3. Does the dot pitch sit on the cell grid — 16 px (8 × the 2 px cell, fine) or 24 px (8 × the 3 px cell, coarse)?
 4. Are there exactly three type voices, never mixed in a line?
-5. Is the grid 12 columns with 3.9 % margins and 1.4 % gutters?
-6. Is there exactly one easing, with all durations in 0.3–1.4 s?
+5. Is the grid 12 columns with 3.9 % margins (`--pad`) and 1.4 % gutters (`--gut` in the hero and the published pages, `--gap` in the site template)? Remember the clamp ceilings: the gutters fix at 20 px above a ~1429 px viewport and the margins fix at 56 px above ~1436 px — on large screens they are fixed pixels, not 1.4 % / 3.9 %.
+6. Is every easing one of the three named curves (general / entrance / exit, §2.4), and every state transition inside 0.3–1.4 s? The named exceptions are exits (0.16–0.25 s), the mask bake (1.65 s) and the continuous loops — loops are not transitions.
 7. Is the accent ≤ 5 % of the frame and is text on paper exactly `#0b0b0c`?
 
 **Plus, for anything generative:** the field must be a pure function of `(uv, aspect, time)` — no state, no
@@ -214,14 +256,17 @@ their parameters listed. See `generative/shaders.md` and `generative/algorithms.
 ## 7. The five facts a future agent must not get wrong
 
 1. **The field is 1-bit ordered dither, not a gradient and not grain.** 8×8 Bayer at the cell
-   (`b8(gl_FragCoord.xy) + .5/64`), cell = 2 CSS px, dot pitch 16 px. Output is paper or ink.
+   (`b8(gl_FragCoord.xy) + .5/64`), cell = 2 CSS px fine / 3 CSS px coarse, dot pitch 16 px (fine) /
+   24 px (coarse). Output is paper or ink.
 2. **The accent colour may only appear inside ink** (`m.y > .5 && m.x > th*.6`). It is never a fill and
    never more than one colour.
 3. **The dither pitch is defined in CSS pixels — `devicePixelRatio` is deliberately not used.** Render at
    cell resolution and upscale by an integer factor with nearest filtering; never resample.
 4. **The type is three separate voices with fixed roles**: Bebas UPPER for display, Inter Tight sentence
    case for text, JetBrains Mono +.07em UPPER for labels. Inter Tight has no 700.
-5. **There is one easing** — `cubic-bezier(.19,1,.22,1)` — and durations live between 0.3 s and 1.4 s.
+5. **There are three easing curves, each with a role** — `cubic-bezier(.19,1,.22,1)` (general),
+   `cubic-bezier(.22,1,.36,1)` (entrance), `cubic-bezier(.2,0,0,1)` (exit / state change) — and state
+   transitions live between 0.3 s and 1.4 s (exits 0.16–0.25 s, mask bake 1.65 s).
    The generative field never stops; it starts at `t = 6.0` so the first frame is never dead.
 
 *(A sixth, if it helps: the whole site is generated by Python into static HTML, and the shader is
@@ -258,8 +303,14 @@ injected verbatim into every page — so "the site" and "the engine" are the sam
 | 11 | The `--dedge` sprite file | Referenced from CSS, the image file not identified | The exact edge artwork is unknown (only its geometry: 32 × 96 px) |
 | 12 | Built-page computed CSS | No browser was launched (per the task rules) | All values come from source, not from a live render |
 
-**12 gaps, none of which affect the generative engine, the colour system, the typography, the grid, or the
-motion timing** — the five load-bearing parts of the identity are fully extracted.
+**These 12 gaps are not all benign.** Gap #2 (the `bakeDither` body is reconstructed, not quoted) touches
+the **generative engine**; gap #5 (`--ink-250` / `--ink-300` panel gradient stops) touches the **colour
+system**; gap #8 (which of `src/template.html` and `src/template_v16/v20_pref2.html` is live)
+undermines **every `template:NN` citation** in this document; gap #12 means no value was ever checked
+against a live render. The typography, the grid and the motion timing are unaffected.
+
+The load-bearing parts of the identity are therefore *mostly* extracted, not *fully*. And the live site
+departs from this system in ways this audit did not and could not reconcile — see **§11**.
 
 ---
 
@@ -267,17 +318,44 @@ motion timing** — the five load-bearing parts of the identity are fully extrac
 
 > Hou2Touch is a TouchDesigner/Houdini school whose visual identity is a **technical print**: black
 > `#0b0b0c` on paper `#e9e7e0`, rasterised through an **8×8 Bayer ordered dither at a 2 px cell** (16 px
-> dot pitch), with exactly **one** TouchDesigner operator-family colour (CHOP `#45a654`, TOP `#8a63c9`,
+> dot pitch fine, 24 px coarse), with exactly **one** TouchDesigner operator-family colour (CHOP
+> `#45a654`, TOP `#65a30d`,
 > SOP `#3d7fd6`, DAT `#c34f9a`, COMP `#9a9a96`) allowed to appear inside the ink and never as a fill.
 > The type is three voices that never mix: **H2T Bebas** (UPPER, `lh .8`) for numerals and titles,
 > **Inter Tight** (sentence case, negative tracking) for prose, and **JetBrains Mono** (+.07em, UPPER,
 > 10–12 px) for instrument labels. Everything sits on a **12-column grid** with 3.9 % margins and 1.4 %
 > gutters, and every surface is annotated like a measurement — ticks, counters, registration grids, a
-> live `f 000000` frame counter, a moving ×3.2 loupe. Motion has **one easing**
-> (`cubic-bezier(.19,1,.22,1)`), durations between 0.3 and 1.4 s, type that rises out of a clipped box,
+> live `f 000000` frame counter, a moving ×3.2 loupe. Motion has **three named easings**
+> (`.19,1,.22,1` general, `.22,1,.36,1` entrance, `.2,0,0,1` exit), state-transition durations between
+> 0.3 and 1.4 s, type that rises out of a clipped box,
 > surfaces that wipe rather than dissolve, and a continuous procedural field that never stops. The field
 > is a **pure function of (uv, aspect, time)** — a domain-warped fBm, a contour map, a travelling wave, a
 > tiled screen, a perspective lattice, a node chain — not an image and not a simulation.
+
+---
+
+## 11. Deviation register — where the live site departs from this system
+
+**This system is canon.** Everything above is the standard a new composition is judged against. The live
+site is **not** a conforming implementation of it — it is a richer, non-conforming variant. The rows
+below are a *register, not a licence*: they exist so that the live pages (and old screenshots of them)
+stay explicable. They do not amend the rules above, and a new composition built to this system must
+still obey them. The live hero in particular **cannot be reproduced outside WebGL** — it is a
+fragment-shader construction with its own colour model, its own dither geometry and its own cell
+derivation, and no static description of it reproduces it.
+
+| # | System rule | Live behaviour (file:line) | Consequence | Status |
+|---|---|---|---|---|
+| 1 | P1 / M2 — the field is 1-bit: `if(m.x>th)c=ink;` | The live hero anti-aliases: `dm=smoothstep(rad+.7,rad-.7,length(rp-hq))*gate(...)` (`en/index.html:4021-4040`) | Continuous tone, not 1-bit — the "one technique" reading no longer holds literally | Deviation — accepted, not reproducible |
+| 2 | P2 / §4.3 — axial 8×8 Bayer (`b8`), evaluated per cell | The live hero is a **rotated halftone**: `rp=rt*fc` (45° rotation matrix), `hq=(floor(rp/hc)+.5)*hc` (`en/index.html:4021-4040`) | The dot matrix sits at 45° to the pixel grid; the Bayer recursion is not what draws the field | Deviation — accepted |
+| 3 | P2 / M3 — fixed dot pitch of 16 px (fine) | The live hero derives the cell from the viewport height: `C=max(3,round(H/170))`, cell = `mix(C,max(2.,floor(C*.5)),inl)` (`en/index.html:4021-4040`) | The pitch is **height-derived**, not fixed at 16 px — it changes with the band height | Deviation — accepted |
+| 4 | P3 / M5 — one accent, only inside ink, never a fill | Solid accent fills in the live build: `--hou` as a button background (`en/index.html:146`), hardcoded `fillStyle="#e5501e"` (`en/index.html:3823`), plus an orange Bayer grid `ORG=vec3(.898,.314,.118)` in the cloud mask; the accent is gated by hash noise `pk()`, not by `th*.6` | Four colours in play (paper, ink, blue-black `dc=mix(INK,vec3(.16,.2,.27),.35)`, orange) and an accent that is *not* confined to the ink | Deviation — accepted |
+| 5 | M11 / X5 — one easing curve | Three curves in production: `--ease:cubic-bezier(.19,1,.22,1)`, `--rx-em:cubic-bezier(.22,1,.36,1)`, `--rx-es:cubic-bezier(.2,0,0,1)` (120–240 ms; the decision is recorded in the source at `en/index.html:1206`) | The system must name three curves with roles, not one | **Resolved in this revision** — §2.4 defines the three roles |
+| 6 | M12 — durations 0.3–1.4 s | Exits run 0.16 / 0.18 / 0.24 / 0.25 s and the mask bake waits 1.65 s (live EN set; `en/index.html:1206`, `hero:826`) | The band must be stated as "transitions 0.3–1.4 s" plus a named exception list | **Resolved in this revision** — §2.5 states the band and the exceptions |
+
+The remaining live-only detail, for completeness: the Bayer value is computed by recursion
+(`b2`/`b4`/`b8` over `fract(dot(...))` hashes) rather than from a 64-value table — that is an
+implementation detail of the same routine, not a different outcome.
 
 ---
 

@@ -165,7 +165,7 @@ In video: burn them in, or generate them per frame from the same values. The fra
 - [ ] Time formula matches `T = 6.0 + n/fps * 0.72`.
 - [ ] Type is Bebas (H2T Bebas) for display, Inter Tight for text, JetBrains Mono for labels.
 - [ ] Labels are mono 10 px, `.07em`, UPPER, on a paper chip.
-- [ ] All easing is `cubic-bezier(.19,1,.22,1)`; durations are in the 0.3–1.4 s band.
+- [ ] All easing is one of the three named curves (`--ease` general / `--rx-em` entrance / `--rx-es` exit); state-transition durations are in the 0.3–1.4 s band (exits 0.16–0.25 s and the 1.65 s mask bake are the named exceptions).
 - [ ] Text on paper is `#0b0b0c`.
 - [ ] The overlay frame counter matches the actual frame number.
 
@@ -179,3 +179,50 @@ In video: burn them in, or generate them per frame from the same values. The fra
 - The web route requires patching `performance.now()`; on the **live** source that is forbidden by the
   task rules. Work on a copy or use Route B/C.
 - There is no audio anywhere in the system. "Sound-reactive" is a narrative, not an implementation.
+
+---
+
+## 9. Delivery — master format
+
+The system specifies **one** delivery format: the master. There are deliberately **no platform presets**
+— no H.264 variants, no per-platform bitrates, no vertical/landscape transcode matrix. The master is
+delivered as it is; any platform copy is derived from it downstream, outside the design system.
+
+| Property | Value |
+|---|---|
+| Container | QuickTime `.mov` |
+| Codec | **ProRes 422 HQ** (mezzanine, edit-friendly) |
+| Colour primaries / transfer | **Rec.709** primaries, **gamma 2.4** transfer |
+| Range | **full range (0–255)** — tagged explicitly, not left to the player |
+| Resolution | the largest target resolution |
+| Frame rate | 25 or 30 fps (the frame contract is fps-agnostic) |
+| Audio | **none — there is no audio anywhere in the system** |
+
+### 9.1 How the master is produced
+
+1. Render the field at **cell resolution** (`master / CELL`; CELL = 2 fine, 3 coarse) — never at the
+   master resolution.
+2. **Integer nearest upscale** — ×2 for the 1920 × 1080 and 3840 × 2160 masters. No non-integer scale,
+   never a downscale (it resamples the dot matrix and produces moiré).
+3. Composite the type and the DOM overlay labels on top.
+4. Encode to ProRes 422 HQ in QuickTime, tagging Rec.709 / gamma 2.4 / full range.
+5. Master at the **largest** target resolution; derive smaller sizes downstream.
+
+### 9.2 Audio — an explicit negative
+
+**There is no audio anywhere in this system.** The 120 bpm pulse mentioned in §6 is a *narrative*
+device (the shader's own cue rates run at 0.5–2 Hz), not a soundtrack. The master is delivered silent:
+no audio stream, no audio track, no sidechain. If a music bed is ever wanted it is added downstream and
+is **not** part of the design system.
+
+### 9.3 Handover checklist
+
+- [ ] Rendered at cell resolution and upscaled ×2 with nearest filtering.
+- [ ] Dot pitch on the cell grid — 16 px (fine) / 24 px (coarse).
+- [ ] Encoded **ProRes 422 HQ** in a QuickTime `.mov`.
+- [ ] **Rec.709** primaries, gamma 2.4, **full range explicitly tagged**.
+- [ ] Master resolution is the largest target resolution.
+- [ ] No audio stream in the file — the system is silent by design.
+- [ ] Time formula `T = 6.0 + n/fps * 0.72` matches the rendered frames.
+- [ ] Type in H2T Bebas / Inter Tight / JetBrains Mono; labels mono 10 px, `.07em`, UPPER.
+- [ ] Text on paper is `#0b0b0c`; the frame readout matches the real frame number.

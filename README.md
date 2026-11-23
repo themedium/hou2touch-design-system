@@ -24,7 +24,7 @@ that belongs to the same visual universe.
 2. Accent colour appears **only inside ink**, and only one family colour per composition.
 3. **Never** resample. Render at cell resolution, upscale by an integer factor, nearest-neighbour.
 4. Three voices never mix inside one line: display, text, mono.
-5. One easing only: `cubic-bezier(.19,1,.22,1)`. Durations 0.3–1.4 s.
+5. Three named easings: `cubic-bezier(.19,1,.22,1)` general, `cubic-bezier(.22,1,.36,1)` entrance, `cubic-bezier(.2,0,0,1)` exit / state change. State-transition durations 0.3–1.4 s.
 
 Full rules, the verification checklist and the list of known gaps are in
 [MASTER_DESIGN_SYSTEM.md](MASTER_DESIGN_SYSTEM.md).

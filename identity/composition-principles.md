@@ -70,8 +70,10 @@ The engine is designed around a fixed physical dot:
 
 ## 5. Principle 4 — The node metaphor is structural, not decorative
 
-The five family colours (`src/template.html:42`) are:
-`--chop #45a654`, `--top #8a63c9`, `--sop #3d7fd6`, `--dat #c34f9a`, `--comp #9a9a96`.
+The five family colours are:
+`--chop #45a654`, `--top #65a30d`, `--sop #3d7fd6`, `--dat #c34f9a`, `--comp #9a9a96`.
+(`--top #8a63c9` was the RU-legacy value, retired 2026-11 — `src/template.html:42` still declares the
+legacy set, which `tools/pipeline/publish.py` marks `noindex`.)
 
 They are used as:
 - an 8 px square in the meta line (`hero:47`)
@@ -179,11 +181,13 @@ The site's empty paper is load-bearing:
 
 ## 11. Principle 10 — One motion language
 
-One easing (`cubic-bezier(.19,1,.22,1)`), durations 0.3–1.4 s, reveals one-shot, type rises, large
-surfaces wipe, pointer = local Gaussian disturbance. See `motion/motion-principles.md`.
+Three named easings, each with a role — `cubic-bezier(.19,1,.22,1)` (general),
+`cubic-bezier(.22,1,.36,1)` (entrance), `cubic-bezier(.2,0,0,1)` (exit / state change) — state-transition
+durations 0.3–1.4 s, reveals one-shot, type rises, large surfaces wipe, pointer = local Gaussian
+disturbance. See `motion/motion-principles.md`.
 
 **Rules**
-- Never introduce a second easing.
+- Never introduce a fourth easing curve — the three named curves are the whole vocabulary.
 - Never dissolve.
 - Never let the field stop.
 
@@ -198,7 +202,7 @@ A composition belongs to the system if all seven answers are yes:
 3. Dot pitch on a 16 px grid?
 4. Exactly three type voices?
 5. 12 columns, 3.9 % margins, 1.4 % gutters?
-6. One easing, durations 0.3–1.4 s?
+6. Easing one of the three named curves, state-transition durations 0.3–1.4 s?
 7. Accent ≤ 5 %; text on paper exactly `#0b0b0c`?
 
 ---
@@ -212,7 +216,7 @@ A composition belongs to the system if all seven answers are yes:
 | A colour photo or 3D render in the band | The field is procedural and flat |
 | A glassmorphic panel | The only `backdrop-filter` is on two chrome strips |
 | Rounded cards above 6 px | The radius vocabulary is 2 / 6 / 999 (pill only) |
-| A second easing | One curve defines the whole motion |
+| A fourth easing curve | Three named curves define the whole motion |
 | A continuous-tone gradient image | 1-bit only |
 | Motion that loops with a visible jump | The field's cues are continuous |
 | Colour used as an information channel | The accent is decorative-at-most; hierarchy is made with weight and size |
