@@ -68,6 +68,41 @@ for (const hex of ['#45a654', '#65a30d', '#3d7fd6', '#c34f9a', '#9a9a96']) {
   if (!color.includes(hex)) fails.push(`identity/color-system.md is missing the family colour ${hex}`);
 }
 
+// 9 — the sixth pillar and the pixel seam
+if (!master.includes('P6')) fails.push(`${MASTER} does not declare the P6 pillar`);
+if (!/pixel seam/i.test(master)) fails.push(`${MASTER} does not mention the pixel seam`);
+
+// 10 — the new normative sections
+if (!/^## 12\./m.test(master)) fails.push(`${MASTER} has no "## 12." heading`);
+if (!/^## 13\./m.test(master)) fails.push(`${MASTER} has no "## 13." heading`);
+
+// 11 — the pixel seam numbers
+for (const token of ['8 px', '12 rows', '96 px', 'scaleY(-1)']) {
+  if (!master.includes(token)) fails.push(`${MASTER} does not mention ${token} for the pixel seam`);
+}
+if (!master.includes('32 quantised') && !master.includes('32 steps')) {
+  fails.push(`${MASTER} does not mention the 32 quantised scroll steps of the pixel seam`);
+}
+
+// 12 — the four plate families
+for (const family of ['Chip', 'Card', 'Pill CTA', 'Bare plate']) {
+  if (!master.includes(family)) fails.push(`${MASTER} does not declare the plate family "${family}"`);
+}
+
+// 13 — the junction rule
+if (!/junction/i.test(master)) fails.push(`${MASTER} does not state the junction rule`);
+if (!master.includes('double statement')) fails.push(`${MASTER} does not state the "double statement" junction rule`);
+
+// 14 — gaps 8 and 11 are resolved
+for (const gap of ['8', '11']) {
+  const row = master.split('\n').find((line) => line.trim().startsWith(`| ${gap} |`));
+  if (!row) {
+    fails.push(`${MASTER} has no gaps-table row for gap #${gap}`);
+  } else if (!row.includes('RESOLVED')) {
+    fails.push(`${MASTER} gaps-table row for gap #${gap} is not marked RESOLVED`);
+  }
+}
+
 if (fails.length) {
   console.log(`GATE_FAIL: ${fails.length} check(s) failed`);
   for (const f of fails) console.log(`  - ${f}`);

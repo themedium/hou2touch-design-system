@@ -13,7 +13,7 @@ The Hou2Touch identity is a **print-first, node-graph, instrument-panel** langua
 > **Ink on paper, rasterised as a 1-bit ordered dither, annotated by mono instrument labels,
 > organised on a 12-column grid, and coloured by exactly one TouchDesigner operator family.**
 
-Five pillars, each with a hard constraint:
+Six pillars, each with a hard constraint:
 
 | Pillar | Hard constraint | Source of truth |
 |---|---|---|
@@ -22,6 +22,7 @@ Five pillars, each with a hard constraint:
 | **P3 — One family colour** | Exactly one of CHOP/TOP/SOP/DAT/COMP per composition. ≤ 5 % coverage. | `template:42`, `hero:303-304` |
 | **P4 — Three type voices** | Bebas caps / Inter Tight sentence / JetBrains Mono labels. Never mixed. | `template:45-47` |
 | **P5 — Instrument surface** | Every mark is a label, a tick, a rule or a counter. | `hero:308-322`, `template:83,138`, `landing.css` |
+| **P6 — Pixel seam** | Every dark↔light junction is a Bayer seam, never a straight edge and never a blur. | `en/index.html:3845-3857`, `template:587` |
 
 ---
 
@@ -297,16 +298,17 @@ injected verbatim into every page — so "the site" and "the engine" are the sam
 | 5 | `--ink-250` / `--ink-300` panel gradient stops | The `:root` grep captured `:38-48`; these live in a rule not printed | The node panel's exact gradient is unknown |
 | 6 | `.tier` / `.tp` price card CSS, `.ix-buycard`, `.ix-buycap`, `.rc-m`, `.tbar` | Selectors known from `adapt_1611.py:47-58`; rules not captured | Price-card recreation is approximate |
 | 7 | `family/family.py` CSS for family nav / author block / works wall | Only the author-image rule was captured (via `wave_l9new.py:131`) | Those three components are under-documented |
-| 8 | Which of `src/template.html` vs `src/template_v16/v20_pref2.html` is live | `.edge` exists only in the numbered variants, not in `src/template.html` | The pixel edge is documented from `v16` — **UNRESOLVED** which is live |
+| 8 | Which of `src/template.html` vs `src/template_v16/v20_pref2.html` is live | Previously believed `.edge` existed only in the numbered variants | **RESOLVED 2026-11** — `.edge` IS present in `src/template.html:587`; `template_v16` / `v20_pref2` do **not** carry it. The pixel edge is documented from the live `src/template.html` |
 | 9 | The two hashed Bebas Neue files in `fonts/` | No `@font-face` referencing them was observed | Their role is unknown |
 | 10 | `tools/pipeline/foot_measure.mjs` dependencies | Only the extension was seen | A headless browser is inferred |
-| 11 | The `--dedge` sprite file | Referenced from CSS, the image file not identified | The exact edge artwork is unknown (only its geometry: 32 × 96 px) |
+| 11 | The `--dedge` sprite file | Referenced from CSS, the image file not identified | **RESOLVED 2026-11** — `--dedge` is a runtime `toDataURL()` (`src/template.html:1617-1620`); there is **no sprite file**. The 32 × 96 figure is the `background-size`, not the image dimensions |
 | 12 | Built-page computed CSS | No browser was launched (per the task rules) | All values come from source, not from a live render |
 
 **These 12 gaps are not all benign.** Gap #2 (the `bakeDither` body is reconstructed, not quoted) touches
 the **generative engine**; gap #5 (`--ink-250` / `--ink-300` panel gradient stops) touches the **colour
 system**; gap #8 (which of `src/template.html` and `src/template_v16/v20_pref2.html` is live)
-undermines **every `template:NN` citation** in this document; gap #12 means no value was ever checked
+is now **RESOLVED** — `.edge` is in `src/template.html:587`, so the `template:NN` citations stand;
+gap #12 means no value was ever checked
 against a live render. The typography, the grid and the motion timing are unaffected.
 
 The load-bearing parts of the identity are therefore *mostly* extracted, not *fully*. And the live site
@@ -356,6 +358,217 @@ derivation, and no static description of it reproduces it.
 The remaining live-only detail, for completeness: the Bayer value is computed by recursion
 (`b2`/`b4`/`b8` over `fract(dot(...))` hashes) rather than from a 64-value table — that is an
 implementation detail of the same routine, not a different outcome.
+
+---
+
+## 12. The pixel seam
+
+### 12.1 What it is
+
+The seam is the **pixelated transition at a dark↔light boundary**. It is built from the **same
+recursive 8×8 Bayer matrix `B8` as the field**, but at **4× the tonal cell**:
+
+> **The field dithers tone; the seam dithers scale. One matrix, two scales.**
+
+The field's tonal cell is 2 CSS px (fine) / 3 px (coarse) — the seam's cell is **8 px desktop /
+4 px mobile**, i.e. exactly 4 × the 2 px tonal cell. There is no second dithering algorithm and no
+second matrix: the seam is the field's matrix re-sampled at a coarser cell, which is why a seam
+and a field look like the same material at two magnifications.
+
+Live implementation: `en/index.html:3845-3857` — a `<canvas class="pxd" id="edge">` at the bottom
+of a `.sec.edge-sec` paper section. Legacy variant in `src/template.html:1617-1620` uses the
+runtime `--dedge` image.
+
+### 12.2 Geometry
+
+| Parameter | Desktop | Mobile |
+|---|---|---|
+| Cell | **8 px** | **4 px** |
+| Rows | **12 rows** | **8 rows** |
+| Band height | **96 px** | **32 px** |
+| Columns | `cols = ceil(sectionWidth / cell)` | same formula |
+| Upscale | CSS `image-rendering: pixelated` (+ `crisp-edges`) | same |
+
+The canvas is **1 canvas-pixel per cell** and is upscaled by CSS. **Integer only** — the canvas is
+already at cell resolution, so no resampling ever happens (M4, X10). The band is 12 rows × 8 px =
+**96 px** on desktop; the mobile band is 8 rows × 4 px = **32 px**.
+
+### 12.3 The dither rule
+
+Identical to the field, with `s` (scroll offset) as the only extra term:
+
+```
+t = clamp(v*1.3 - 0.3 + s, 0, 1) * 64      v = (r + 0.5) / rows
+ink if t > B8[(r%8)*8 + (i%8)]
+```
+
+### 12.4 Ink polarity — the rule read in two directions
+
+The seam paints **the ink of the section it BELONGS to**, on a transparent canvas, so the
+neighbouring surface shows through the holes.
+
+| Live case | Painted ink | Host section | Reads as |
+|---|---|---|---|
+| `en/index.html:3845-3857` | `#0B0B0C` | paper section | dark neighbour bleeds **into** the paper |
+| `src/template.html:1617-1620` (`--dedge`) | `#E9E7E0` | dark section | cream bleeds **out of** the dark onto paper |
+
+These are **the same rule read in opposite directions** — not two variants. A seam is always
+drawn in the ink of its own side.
+
+### 12.5 Direction
+
+**One generator serves both directions.** The seam is a single canvas routine; placement decides
+its polarity and its flip:
+
+| Selector | Placement | Flip |
+|---|---|---|
+| `.edge.b` | bottom of a paper section (dark above) | `transform: scaleY(-1)` |
+| `.edge.t` | top of a paper section (dark below) | none |
+
+### 12.6 Motion
+
+Ink density is driven by scroll position:
+
+```
+paint(Math.round((p - .5) * .44 * 32) / 32)
+```
+
+— **32 quantised steps** across the scroll range. Redraw happens in the **shared rAF loop**, only
+**while the seam is on screen**, and only **when the step changes**. Under `prefers-reduced-motion`
+the seam is **static**: a single state at `s = 0` (the mid-ramp).
+
+**Static default: `s = 0`.** Any non-interactive render (print, video, still) uses `s = 0`.
+
+### 12.7 Mandatory placement
+
+**Every junction between a dark surface and paper MUST have a seam. A straight edge is a
+violation.** The existing lint enforces it: `tools/check_total.py:209` requires a `.seam` /
+`.edge` at every light/dark junction (page 203 is whitelisted), and `:195` requires
+`padding-top >= 96 + --r-air` on sections carrying `.edge.t`.
+
+### 12.8 Forbidden substitutions
+
+| Forbidden | Why |
+|---|---|
+| A soft gradient fade | continuous tone — breaks the 1-bit premise (M2) |
+| A blurred edge | continuous tone, same reason, plus it breaks the integer-upscale rule (M4) |
+| A torn-paper PNG | a bitmap, not the matrix; it cannot hold the 4× cell relationship |
+| A `mask-image` feather | continuous tone at the boundary |
+
+All four break the premise that **the seam is the same dither as the field, at a known cell
+ratio**.
+
+### 12.9 The second family — `--edge-img`
+
+On course pages the seam also ships as an **inline base64 8×24 PNG**, tiled with
+`background-size: 32px 96px repeat-x` (×4), used together with `.tf>.edge` and `.seam`. The
+32 × 96 figures here are the **background size**, not the image dimensions (the PNG itself is
+8 × 24).
+
+### 12.10 Other media
+
+- **Print and video:** the seam is rendered at the **same 4× cell relationship** (8 px seam cell
+  against the 2 px tonal cell) and is **STATIC** — no scroll. Pick **`s = 0`** and state it in
+  the render manifest.
+- **3D / Blender:** the seam is a **texture, not geometry** — a plane or shader mask carrying the
+  baked Bayer ramp, never a modelled jagged edge.
+
+---
+
+## 13. Plate policy
+
+### 13.1 Principle
+
+> **A plate is a stamp on paper, not a container.**
+
+The system separates by **whitespace and hairline**, not by boxes. Therefore a plate is permitted
+**only where the content is a *label, a control, or a datum*** — **never** to group content that
+whitespace could group.
+
+This is a **decision rule**, not a style guide: it tells you whether to draw a plate at all.
+
+### 13.2 Closed vocabulary — exactly four permitted families
+
+| # | Family | Radius | Size / fill | For |
+|---|---|---|---|---|
+| 1 | **Chip** | **2 px** | height **24 px**, inset hairline `--line2`, mono 10–12 px, `.07em`, UPPER, optional 7–9 px family-colour square | operator tags, audience/level labels, flags |
+| 2 | **Card** | **6 px** | 1 px border, **NO fill** except the node-panel gradient | a simulated node, an end-of-list link. **Maximum one per screen region** |
+| 3 | **Pill CTA** | **999 px** | height **56 px** | the **primary call to action only**. Never a label, never a nav item, never a tag |
+| 4 | **Bare plate** | **0** | no border, no fill | price columns, table-like data — anything that is a *column of content*, not a box |
+
+The four families map to the live classes: chip = `.op` / `.tag` / `.tag.key`; card = `.pn` / `.enl` /
+`.sq`; pill CTA = `.btn.pill`; bare plate = `.tier` / `.seg` / `.inp button`.
+
+### 13.3 Forbidden
+
+- Any radius outside `{0, 2, 6, 999}`.
+- A plate with a **drop shadow**.
+- A plate with `backdrop-filter`.
+- A plate whose fill is a **gradient** (except the node panel).
+- A plate **at a dark↔light junction** — the seam does that job; a plate there is a double
+  statement.
+
+### 13.4 The junction rule
+
+At a dark↔light boundary the **only** permitted device is the **pixel seam**. No plate, no card,
+no divider, no gradient may be used to mark that boundary.
+
+> **Two devices for one boundary is a violation.**
+
+The seam already states "the value changes here". A box, rule or fade stating it again is a
+**double statement** on the same edge, and it breaks the 1-bit reading (§12).
+
+### 13.5 Density budget
+
+Observed reality on `en/index.html`: **≈130 plate surfaces** (≈45 `.btn`, ≈30 `.tag`, 13 `.op`,
+~8 `.pn`, ~25 circles, ~15 media frames) against **~20 course cards that are pure open paper**
+(`.cc` has no background, no border, no radius). The site is therefore **plate-heavy at the
+control layer and plate-light at the container layer** — which is the correct axis.
+
+The budget rule:
+
+- Plates must not exceed roughly **one per 6 lines of text** in any viewport-height of content.
+- A section that needs **more than three chips in a row is a list, not a plate cluster**.
+
+The test:
+
+> **If you can remove the plate and the content still separates, remove the plate.**
+
+### 13.6 Remediation register
+
+Observed in the live source. Every radius outside the vocabulary is a **must-fix** against M13/X9.
+
+| Current value | Where | Target | Status |
+|---|---|---|---|
+| **8 px** | `.mp-bx`, `.mp-h2t`, `.f-fam .mp-h2t::before` | 6 px (container) or 2 px (control) | must-fix |
+| **10 px** | `.aud-yes`, `.aud-no`, `.aud-no>.ph` | **6 px** — these are cards, 4 px over the X9 limit | must-fix |
+| **4 px** | `.mn`, `.mp-en`, `.ni-go`, `.mpm .in-m`, `.mr`, `.mpd`, `.sp-b`, `.n3-nx`, `.n3-b>button` | **2 px** for controls, **6 px** for containers | must-fix |
+| **3 px** | `.prv`, `.en`, `.plt`, `.lb img`, `.vc .fr`, `.sp-fr`, `.n3-ch>li`, `.n3-md>div`, `.cc-vw-box` | **2 px** for controls, **6 px** for containers | must-fix |
+| **5 px** | `.f-net3 .n3-r` | **2 px** (control) | must-fix |
+| gradient fill `--pnb:linear-gradient(180deg,#141416,#111113)` | `.pn`, ~8× per page | node panel is the **one permitted gradient fill** | **permitted exception** (M15, family 2) |
+| gradient fill | `.aud-yes` surface gradient | node-panel family only | must-fix |
+| `drop-shadow` ×3 | `.aud-yes`, `.cc-vw-box`, `.f-net3 .n3-q::before` | remove | must-fix (M15) |
+| `backdrop-filter: blur()` ×4 | `.nav.stuck`, `.tlb`, `.f-nav3 .nav.lt`, `.f-mstack .mbar` | permitted **only** for sticky chrome — see §13.7 | **permitted exception** (sticky chrome) |
+| radius **0**, no border | `.tier` price column | 0 is in the vocabulary (family 4) | **permitted exception** (bare plate) |
+| `.btn` declares neither height nor radius in `en/index.html:140` | — | must match `src/template.html:104` (`height:48px; border-radius:2px`) | must-fix (source inconsistency) |
+
+### 13.7 The `backdrop-filter` contradiction — resolved
+
+M15 forbids glassmorphism, yet four live rules use `backdrop-filter: blur()`. **This document
+permits it in exactly one case:**
+
+> **`backdrop-filter` is permitted ONLY for sticky chrome that floats over content** — nav,
+> timeline bar, stack bar.
+
+**Justification:** a sticky bar over a 1-bit field cannot use a solid fill, because an opaque
+fill would hide the field the bar is floating over. Translucency is the only honest option.
+The conditions are strict:
+
+- **`rgba` + blur only** — never an opaque colour.
+- **Never a shadow** (M15 still holds).
+- **Never on a static element** — only on something that is actually sticky and floating.
+
+Everything else — a card, a chip, a modal, a static header — is forbidden.
 
 ---
 
