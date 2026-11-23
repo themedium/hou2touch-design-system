@@ -1,0 +1,461 @@
+{
+  "system": "Hou2Touch 1-bit field",
+  "generated_by": "render.py (pure Python + numpy/Pillow, no browser, no WebGL)",
+  "field_bits": 1,
+  "paper": "#e9e7e0",
+  "ink": "#0b0b0c",
+  "cell_px": 2,
+  "dot_pitch_px": 16,
+  "dither": "ordered 8x8 Bayer, th=(B8[y&7][x&7]+0.5)/64, evaluated per cell",
+  "resample": "none \u2014 integer nearest-neighbour upscale only",
+  "accent_gate": "colour mask tightened by threshold so accent stays inside ink and within 1.5-4.5% of the frame; only connected blocks of >= 9 cells are kept, so the accent is a solid mass",
+  "accent_target": 0.03,
+  "accent_band_pct": [
+    1.5,
+    4.5
+  ],
+  "accent_min_block_cells": 9,
+  "display_line_height": 0.8,
+  "display_optical_overshoot_em": 0.06,
+  "display_left_margin_em": -0.03,
+  "display_max_overlap_cells": 2,
+  "quiet_zone_rule": "one zone per image: the type column, bleeding to the left, top and bottom outer edge with zero inset",
+  "grid": {
+    "columns": 12,
+    "margin_pct_of_width": 3.9,
+    "gutter_pct_of_width": 1.4
+  },
+  "fonts": {
+    "font_dir": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts",
+    "font_dir_exists": true,
+    "files": [
+      {
+        "file": "bac5026d1c2ab786d3abee509cddf656.ttf",
+        "family": "Bebas Neue",
+        "style": "Regular",
+        "path": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/bac5026d1c2ab786d3abee509cddf656.ttf"
+      },
+      {
+        "file": "c07b757a71a19ac97cc9364f87e15d46.otf",
+        "family": "Bebas Neue",
+        "style": "Bold",
+        "path": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/c07b757a71a19ac97cc9364f87e15d46.otf"
+      },
+      {
+        "file": "h2t-bebas.otf",
+        "family": "H2T Bebas",
+        "style": "Bold",
+        "path": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/h2t-bebas.otf"
+      }
+    ],
+    "chosen": {
+      "display": {
+        "path": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/h2t-bebas.otf",
+        "source": "project"
+      },
+      "text": {
+        "path": "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "source": "system"
+      },
+      "mono": {
+        "path": "/System/Library/Fonts/Menlo.ttc",
+        "source": "system"
+      }
+    }
+  },
+  "outputs": [
+    {
+      "path": "poster_a4.png",
+      "output_width": 2480,
+      "output_height": 3508,
+      "cell_width": 1240,
+      "cell_height": 1754,
+      "upscale": 2,
+      "cell_px": 2,
+      "bayer": "8x8 ordered, th=(B8[y&7][x&7]+0.5)/64",
+      "dot_pitch_px": 16,
+      "unique_colours": 3,
+      "unique_colour_list": [
+        "#0b0b0c",
+        "#3d7fd6",
+        "#e9e7e0"
+      ],
+      "paper": "#e9e7e0",
+      "ink": "#0b0b0c",
+      "accent": "#3d7fd6",
+      "family": "sop",
+      "two_tones_plus_at_most_one_accent": true,
+      "exactly_two_tones_plus_one_accent": true,
+      "motif": "terrain",
+      "time": 6.0,
+      "field_zoom": 1.0,
+      "png_format": "8-bit RGB (PNG colour type 2), non-interlaced, no interlacing/palette",
+      "pure_function": true,
+      "typography": "real fonts",
+      "typefaces": {
+        "display": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/h2t-bebas.otf",
+        "text": "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "mono": "/System/Library/Fonts/Menlo.ttc"
+      },
+      "typeface_source": {
+        "display": "project",
+        "text": "system",
+        "mono": "system"
+      },
+      "display_line_height": 0.8,
+      "display_optical_overshoot_em": 0.06,
+      "display_left_margin_em": -0.03,
+      "display_max_overlap_cells": 2,
+      "quiet_zones_cell_rects": [
+        [
+          0,
+          0,
+          585,
+          1754
+        ]
+      ],
+      "text_rects": [
+        {
+          "kind": "display",
+          "text": "HOU2",
+          "size": 280,
+          "x": 102,
+          "y": 314,
+          "w": 870,
+          "h": 402
+        },
+        {
+          "kind": "display",
+          "text": "TOUCH",
+          "size": 280,
+          "x": 84,
+          "y": 762,
+          "w": 1074,
+          "h": 402
+        },
+        {
+          "kind": "text",
+          "text": "A one-bit field rendered in pure Python.",
+          "size": 22,
+          "x": 96,
+          "y": 2814,
+          "w": 752,
+          "h": 40
+        },
+        {
+          "kind": "mono",
+          "text": "COURSE 207 / SOP / TERRAIN / 1-BIT",
+          "size": 19,
+          "x": 98,
+          "y": 3058,
+          "w": 834,
+          "h": 32
+        }
+      ],
+      "quiet_zones": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1170,
+          "h": 3508
+        }
+      ],
+      "display_lines": [
+        {
+          "text": "HOU2",
+          "size": 280,
+          "bbox_cell": [
+            51.0,
+            157.0,
+            486.0,
+            358.0
+          ]
+        },
+        {
+          "text": "TOUCH",
+          "size": 280,
+          "bbox_cell": [
+            42.0,
+            381.0,
+            579.0,
+            582.0
+          ]
+        }
+      ],
+      "headline_size": 280,
+      "display_max_size": 280,
+      "accent_min_block_cells": 9,
+      "accent_largest_block_cells": 18687,
+      "accent_fraction": 0.02908,
+      "accent_fraction_pct": 2.908,
+      "accent_cells": 63257,
+      "pixel_counts": {
+        "#0b0b0c": 2196832,
+        "#3d7fd6": 253028,
+        "#e9e7e0": 6249980
+      }
+    },
+    {
+      "path": "still_16x9.png",
+      "output_width": 1920,
+      "output_height": 1080,
+      "cell_width": 960,
+      "cell_height": 540,
+      "upscale": 2,
+      "cell_px": 2,
+      "bayer": "8x8 ordered, th=(B8[y&7][x&7]+0.5)/64",
+      "dot_pitch_px": 16,
+      "unique_colours": 3,
+      "unique_colour_list": [
+        "#0b0b0c",
+        "#45a654",
+        "#e9e7e0"
+      ],
+      "paper": "#e9e7e0",
+      "ink": "#0b0b0c",
+      "accent": "#45a654",
+      "family": "chop",
+      "two_tones_plus_at_most_one_accent": true,
+      "exactly_two_tones_plus_one_accent": true,
+      "motif": "shader",
+      "time": 6.0,
+      "field_zoom": 1.0,
+      "png_format": "8-bit RGB (PNG colour type 2), non-interlaced, no interlacing/palette",
+      "pure_function": true,
+      "typography": "real fonts",
+      "typefaces": {
+        "display": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/h2t-bebas.otf",
+        "text": "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "mono": "/System/Library/Fonts/Menlo.ttc"
+      },
+      "typeface_source": {
+        "display": "project",
+        "text": "system",
+        "mono": "system"
+      },
+      "display_line_height": 0.8,
+      "display_optical_overshoot_em": 0.06,
+      "display_left_margin_em": -0.03,
+      "display_max_overlap_cells": 2,
+      "quiet_zones_cell_rects": [
+        [
+          0,
+          0,
+          394,
+          540
+        ]
+      ],
+      "text_rects": [
+        {
+          "kind": "display",
+          "text": "SPECTRAL",
+          "size": 118,
+          "x": 70,
+          "y": 96,
+          "w": 706,
+          "h": 170
+        },
+        {
+          "kind": "display",
+          "text": "RINGS",
+          "size": 118,
+          "x": 74,
+          "y": 284,
+          "w": 406,
+          "h": 170
+        },
+        {
+          "kind": "text",
+          "text": "Posterised interference, ordered-dithered.",
+          "size": 18,
+          "x": 76,
+          "y": 674,
+          "w": 662,
+          "h": 32
+        },
+        {
+          "kind": "mono",
+          "text": "COURSE 301 / CHOP / SHADER / 1-BIT",
+          "size": 14,
+          "x": 74,
+          "y": 848,
+          "w": 610,
+          "h": 24
+        }
+      ],
+      "quiet_zones": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 788,
+          "h": 1080
+        }
+      ],
+      "display_lines": [
+        {
+          "text": "SPECTRAL",
+          "size": 118,
+          "bbox_cell": [
+            35.0,
+            48.0,
+            388.0,
+            133.0
+          ]
+        },
+        {
+          "text": "RINGS",
+          "size": 118,
+          "bbox_cell": [
+            37.0,
+            142.0,
+            240.0,
+            227.0
+          ]
+        }
+      ],
+      "headline_size": 118,
+      "display_max_size": 118,
+      "accent_min_block_cells": 9,
+      "accent_largest_block_cells": 1339,
+      "accent_fraction": 0.02956,
+      "accent_fraction_pct": 2.956,
+      "accent_cells": 15322,
+      "pixel_counts": {
+        "#0b0b0c": 529088,
+        "#45a654": 61288,
+        "#e9e7e0": 1483224
+      }
+    },
+    {
+      "path": "square_1080.png",
+      "output_width": 1080,
+      "output_height": 1080,
+      "cell_width": 540,
+      "cell_height": 540,
+      "upscale": 2,
+      "cell_px": 2,
+      "bayer": "8x8 ordered, th=(B8[y&7][x&7]+0.5)/64",
+      "dot_pitch_px": 16,
+      "unique_colours": 3,
+      "unique_colour_list": [
+        "#0b0b0c",
+        "#65a30d",
+        "#e9e7e0"
+      ],
+      "paper": "#e9e7e0",
+      "ink": "#0b0b0c",
+      "accent": "#65a30d",
+      "family": "top",
+      "two_tones_plus_at_most_one_accent": true,
+      "exactly_two_tones_plus_one_accent": true,
+      "motif": "chladni",
+      "time": 6.05,
+      "field_zoom": 1.0,
+      "png_format": "8-bit RGB (PNG colour type 2), non-interlaced, no interlacing/palette",
+      "pure_function": true,
+      "typography": "real fonts",
+      "typefaces": {
+        "display": "/Users/lvn/Desktop/MCP/hou2touch_redesign/fonts/h2t-bebas.otf",
+        "text": "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "mono": "/System/Library/Fonts/Menlo.ttc"
+      },
+      "typeface_source": {
+        "display": "project",
+        "text": "system",
+        "mono": "system"
+      },
+      "display_line_height": 0.8,
+      "display_optical_overshoot_em": 0.06,
+      "display_left_margin_em": -0.03,
+      "display_max_overlap_cells": 2,
+      "quiet_zones_cell_rects": [
+        [
+          0,
+          0,
+          257,
+          540
+        ]
+      ],
+      "text_rects": [
+        {
+          "kind": "display",
+          "text": "NODAL",
+          "size": 118,
+          "x": 42,
+          "y": 96,
+          "w": 458,
+          "h": 170
+        },
+        {
+          "kind": "display",
+          "text": "PLATE",
+          "size": 118,
+          "x": 42,
+          "y": 286,
+          "w": 424,
+          "h": 166
+        },
+        {
+          "kind": "text",
+          "text": "Chladni plate, 540 cells.",
+          "size": 22,
+          "x": 44,
+          "y": 602,
+          "w": 458,
+          "h": 40
+        },
+        {
+          "kind": "mono",
+          "text": "COURSE 101 / TOP / CHLADNI / 1-BIT",
+          "size": 10,
+          "x": 42,
+          "y": 814,
+          "w": 454,
+          "h": 18
+        }
+      ],
+      "quiet_zones": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 514,
+          "h": 1080
+        }
+      ],
+      "display_lines": [
+        {
+          "text": "NODAL",
+          "size": 118,
+          "bbox_cell": [
+            21.0,
+            48.0,
+            250.0,
+            133.0
+          ]
+        },
+        {
+          "text": "PLATE",
+          "size": 118,
+          "bbox_cell": [
+            21.0,
+            143.0,
+            233.0,
+            226.0
+          ]
+        }
+      ],
+      "headline_size": 118,
+      "display_max_size": 118,
+      "accent_min_block_cells": 9,
+      "accent_largest_block_cells": 6128,
+      "accent_fraction": 0.0299,
+      "accent_fraction_pct": 2.99,
+      "accent_cells": 8719,
+      "pixel_counts": {
+        "#0b0b0c": 266544,
+        "#65a30d": 34876,
+        "#e9e7e0": 864980
+      }
+    }
+  ]
+}
