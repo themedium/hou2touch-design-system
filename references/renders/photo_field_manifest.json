@@ -1,0 +1,47 @@
+{
+  "artifact": "photo_field_16x9.png",
+  "generator": "photo_field.py",
+  "source_photo": "../../../img/hero_school.webp",
+  "source_native_size": [
+    1440,
+    900
+  ],
+  "crop_box_xyxy": [
+    0,
+    45,
+    1440,
+    855
+  ],
+  "crop_size": [
+    1440,
+    810
+  ],
+  "crop_centre": true,
+  "aspect": "16:9",
+  "cell_width": 960,
+  "cell_height": 540,
+  "upscale": 2,
+  "output_width": 1920,
+  "output_height": 1080,
+  "png_format": "8-bit truecolour RGB (colour type 2), non-interlaced",
+  "colours": {
+    "paper": "#e9e7e0",
+    "ink": "#0b0b0c"
+  },
+  "unique_colours": 2,
+  "accents": 0,
+  "accent_colour": null,
+  "dither": {
+    "type": "ordered 8x8 Bayer",
+    "matrix_build": "M' = 4M + [[0,2],[3,1]] tiled 2x2, 3 iterations",
+    "threshold": "(B8[y&7][x&7] + 0.5) / 64",
+    "row_index": "cell_row & 7 (top-down)",
+    "col_index": "cell_col & 7",
+    "ink_rule": "cell is INK when its tone < threshold",
+    "tone": "mean luminance of each 8x8 block of the cell grid"
+  },
+  "luminance": "L = 0.299R + 0.587G + 0.114B, normalised 0..1",
+  "upscale_mode": "nearest neighbour only (np.repeat), integer factor 2",
+  "ink_fraction": 0.08054783950617284,
+  "ink_fraction_note": "fraction of CELLS that are ink (pixel fraction is identical)"
+}
