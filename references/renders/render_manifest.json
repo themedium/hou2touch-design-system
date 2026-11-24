@@ -86,7 +86,7 @@
       "family": "sop",
       "two_tones_plus_at_most_one_accent": true,
       "exactly_two_tones_plus_one_accent": true,
-      "motif": "terrain",
+      "motif": "interference",
       "time": 6.0,
       "field_zoom": 1.0,
       "png_format": "8-bit RGB (PNG colour type 2), non-interlaced, no interlacing/palette",
@@ -114,6 +114,15 @@
           1754
         ]
       ],
+      "field_region": {
+        "axis": "x",
+        "cell_x0": 585,
+        "cell_x1": 1240,
+        "cell_y0": 0,
+        "cell_y1": 1754,
+        "edge_seam_cells": 16,
+        "edge_seam_rule": "the paper column ends at cell_x0; over the next edge_seam_cells cells the 8x8 Bayer threshold is raised from 1 to 0, so the field is brought in cell by cell through the ordered matrix \u2014 the paper->field junction is never a straight edge"
+      },
       "text_rects": [
         {
           "kind": "display",
@@ -144,11 +153,11 @@
         },
         {
           "kind": "mono",
-          "text": "COURSE 207 / SOP / TERRAIN / 1-BIT",
-          "size": 19,
+          "text": "COURSE 207 / SOP / RINGS / 1-BIT",
+          "size": 20,
           "x": 98,
           "y": 3058,
-          "w": 834,
+          "w": 852,
           "h": 32
         }
       ],
@@ -185,14 +194,21 @@
       "headline_size": 280,
       "display_max_size": 280,
       "accent_min_block_cells": 9,
-      "accent_largest_block_cells": 18687,
-      "accent_fraction": 0.02908,
-      "accent_fraction_pct": 2.908,
-      "accent_cells": 63257,
+      "accent_largest_block_cells": 14373,
+      "accent_source": "interference_arc",
+      "accent_fraction": 0.00661,
+      "accent_fraction_pct": 0.661,
+      "accent_cells": 14373,
+      "accent_symmetry": {
+        "sym180": 0.0892,
+        "mirror_h": 0.0678,
+        "mirror_v": 0.0497,
+        "max": 0.0892
+      },
       "pixel_counts": {
-        "#0b0b0c": 2196832,
-        "#3d7fd6": 253028,
-        "#e9e7e0": 6249980
+        "#0b0b0c": 540852,
+        "#3d7fd6": 57492,
+        "#e9e7e0": 8101496
       }
     },
     {
@@ -245,6 +261,15 @@
           540
         ]
       ],
+      "field_region": {
+        "axis": "x",
+        "cell_x0": 394,
+        "cell_x1": 960,
+        "cell_y0": 0,
+        "cell_y1": 540,
+        "edge_seam_cells": 16,
+        "edge_seam_rule": "the paper column ends at cell_x0; over the next edge_seam_cells cells the 8x8 Bayer threshold is raised from 1 to 0, so the field is brought in cell by cell through the ordered matrix \u2014 the paper->field junction is never a straight edge"
+      },
       "text_rects": [
         {
           "kind": "display",
@@ -316,14 +341,21 @@
       "headline_size": 118,
       "display_max_size": 118,
       "accent_min_block_cells": 9,
-      "accent_largest_block_cells": 1339,
-      "accent_fraction": 0.02956,
-      "accent_fraction_pct": 2.956,
-      "accent_cells": 15322,
+      "accent_largest_block_cells": 1331,
+      "accent_source": "colour-mask threshold",
+      "accent_fraction": 0.02935,
+      "accent_fraction_pct": 2.935,
+      "accent_cells": 15216,
+      "accent_symmetry": {
+        "sym180": 0.1594,
+        "mirror_h": 0.1149,
+        "mirror_v": 0.1558,
+        "max": 0.1594
+      },
       "pixel_counts": {
-        "#0b0b0c": 529088,
-        "#45a654": 61288,
-        "#e9e7e0": 1483224
+        "#0b0b0c": 523932,
+        "#45a654": 60864,
+        "#e9e7e0": 1488804
       }
     },
     {
@@ -376,6 +408,15 @@
           540
         ]
       ],
+      "field_region": {
+        "axis": "x",
+        "cell_x0": 257,
+        "cell_x1": 540,
+        "cell_y0": 0,
+        "cell_y1": 540,
+        "edge_seam_cells": 16,
+        "edge_seam_rule": "the paper column ends at cell_x0; over the next edge_seam_cells cells the 8x8 Bayer threshold is raised from 1 to 0, so the field is brought in cell by cell through the ordered matrix \u2014 the paper->field junction is never a straight edge"
+      },
       "text_rects": [
         {
           "kind": "display",
@@ -447,14 +488,21 @@
       "headline_size": 118,
       "display_max_size": 118,
       "accent_min_block_cells": 9,
-      "accent_largest_block_cells": 6128,
-      "accent_fraction": 0.0299,
-      "accent_fraction_pct": 2.99,
-      "accent_cells": 8719,
+      "accent_largest_block_cells": 5946,
+      "accent_source": "chladni_nodal",
+      "accent_fraction": 0.02039,
+      "accent_fraction_pct": 2.039,
+      "accent_cells": 5946,
+      "accent_symmetry": {
+        "sym180": 0.0434,
+        "mirror_h": 0.3024,
+        "mirror_v": 0.0417,
+        "max": 0.3024
+      },
       "pixel_counts": {
-        "#0b0b0c": 266544,
-        "#65a30d": 34876,
-        "#e9e7e0": 864980
+        "#0b0b0c": 335568,
+        "#65a30d": 23784,
+        "#e9e7e0": 807048
       }
     },
     {
@@ -507,6 +555,16 @@
           900
         ]
       ],
+      "field_region": {
+        "axis": "y",
+        "junction": "bayer_seam_band",
+        "cell_x0": 675,
+        "cell_x1": 1240,
+        "cell_y0": 900,
+        "cell_y1": 1754,
+        "edge_seam_cells": 0,
+        "edge_seam_rule": "the paper/field junction of this composition is horizontal and IS the \u00a712 pixel seam: a 12-row Bayer band, so the transition is resolved by the ordered matrix row by row, not by a straight cut"
+      },
       "text_rects": [
         {
           "kind": "display",
@@ -598,12 +656,12 @@
       "accent_min_block_cells": 9,
       "accent_largest_block_cells": 1638,
       "accent_rule_count": 12,
-      "accent_fraction": 0.00904,
-      "accent_fraction_pct": 0.904,
-      "accent_cells": 19656,
+      "accent_fraction": 0.00502,
+      "accent_fraction_pct": 0.502,
+      "accent_cells": 10926,
       "pixel_counts": {
-        "#0b0b0c": 3996420,
-        "#9a9a96": 78624,
+        "#0b0b0c": 4031340,
+        "#9a9a96": 43704,
         "#e9e7e0": 4624796
       },
       "seam": {
@@ -674,9 +732,81 @@
           "rules": 12,
           "rule_height_px": 12,
           "rule_width_px": 546,
-          "pitch_px": 30,
+          "pitch_px": 60.0,
           "first_rule_y": 2190,
-          "note": "one rule per band row, continuing the seam's row rhythm below the band; reads as a measurement scale, not a floating block"
+          "rule_y_cells": [
+            1095,
+            1101,
+            1107,
+            1113,
+            1130,
+            1138,
+            1173,
+            1208,
+            1260,
+            1295,
+            1364,
+            1425
+          ],
+          "rule_widths_cells": [
+            76,
+            76,
+            76,
+            76,
+            176,
+            100,
+            176,
+            174,
+            225,
+            174,
+            273,
+            249
+          ],
+          "rule_shape": "each rule is a SLOPED bar (each row one cell shorter than the row above), so no accent region is a rectangle",
+          "rule_width_note": "each rule is as wide as the band's own ink fraction at that row, so the ladder is a staircase (never a stack of rectangles)",
+          "rule_y_px": [
+            2190,
+            2202,
+            2214,
+            2226,
+            2260,
+            2276,
+            2346,
+            2416,
+            2520,
+            2590,
+            2728,
+            2850
+          ],
+          "rule_pitch_cells": [
+            6,
+            6,
+            6,
+            17,
+            8,
+            35,
+            35,
+            52,
+            35,
+            69,
+            61
+          ],
+          "cumulative_ink": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.105932,
+            0.131356,
+            0.237288,
+            0.341525,
+            0.500847,
+            0.605085,
+            0.815254,
+            1.0
+          ],
+          "span_cells": 330,
+          "note": "the rule offsets are proportional to the CUMULATIVE ink of the seam (see ink_fraction_per_row), so the ladder's pitch encodes the seam's density curve: tight where the seam is still paper, wide where it is already dense. An even pitch reads as a barcode."
         }
       }
     }

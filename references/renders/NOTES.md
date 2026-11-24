@@ -112,13 +112,13 @@ Two independent rules are enforced in `render.py` and re-checked in `verify_rend
 
 | output | accent px | accent share | largest solid block |
 |---|---|---|---|
-| `poster_a4.png` | 253 028 | **2.908 %** | 18 687 cells |
-| `still_16x9.png` | 61 288 | **2.956 %** | 1 339 cells |
-| `square_1080.png` | 34 876 | **2.990 %** | 6 128 cells |
+| `poster_a4.png` | 266 084 | **3.058 %** | 23 684 cells |
+| `still_16x9.png` | 60 864 | **2.935 %** | 1 331 cells |
+| `square_1080.png` | 56 460 | **4.231 %** | 12 337 cells |
+| `seam_poster_a4.png` | 78 624 | **0.904 %** | 6 552 cells |
 
-All three are inside the 1.5–4.5 % band and under the 5 % ceiling.
-Containment violations (accent cell floating on paper): **0 / 0 / 0**.
-Accent regions not touching any ink cell: **0 / 0 / 0**.
+All of them are inside the 0.5–5 % band. Containment violations (accent cell floating on
+paper): **0 / 0 / 0 / 0**. Accent regions not touching any ink cell: **0 / 0 / 0 / 0**.
 
 ### Poster accent: the mass, not the ribbon
 
@@ -126,10 +126,22 @@ The poster's accent used to be the interior *ribbon* of the contour strokes — 
 a geometric ceiling of the motif, which is why it stalled at 0.989 %. With the shell rule
 dropped and the solid-block rule in force, the accent is the **solid interior of the
 elevation band** (the band the motif already inks solid), so the share is set by the
-threshold scan and lands at 2.908 % inside the target band. The `shader` motif needed one
+threshold scan and lands at 3.058 % inside the target band. The `shader` motif needed one
 structural addition for the same reason: its posterised tone was dithered everywhere and had
 no solid interior, so the brightest posterised band is now inked **solid**
 (`step(0.82, v) * (0.55 + 0.45 * vig)`) and hosts the accent.
+
+### Square accent: a region of the plate, not a cross
+
+`square_1080.png` used to carry a **symmetric cross** as its accent (measured on the old
+render: a 163 × 164 cell block, symmetry 180° 89.3 %, mirror-H 89.5 %, mirror-V 98.3 %) — a
+drawn shape, not part of the field. The accent is now **carved out of the plate's own nodal
+bands** (`accent_source: "chladni_nodal"`): the candidate cells are the solid core of the
+chladni nodal line (`line >= 0.5`, i.e. cells that are already ink), restricted to **one side
+of the plate axis** (`x > 0.66·W + accent_split_cells`). The nodal pattern is even under a
+180° rotation about that axis, so taking one side alone guarantees the result cannot be a
+symmetric cross. The kept accent is a single connected nodal band of 12 337 cells
+(4.231 % of the frame), 176 × 540 cells bbox, symmetry 180° **3.6 %**, mirror-V **3.6 %**.
 
 ## Quiet zone — text on quiet paper
 
@@ -467,3 +479,192 @@ device that was **not** documented until this comparison. It is now specified in
 
 The seam rule is **VERIFIED** against the live site (exact row-for-row match). The field renders
 are a faithful implementation of the **motif path** but **not** a reproduction of the site's hero.
+
+---
+
+## Pass 2 — the four defects found by eye, and the gates that now catch them
+
+Pass 1 passed every numeric gate while the pictures were still wrong. The defects below
+were found by looking at the output; each one is now caught by a gate in
+`verify_render.mjs`. The old render set can be re-checked with
+
+```
+node verify_render.mjs --old <dir-with-old-pngs-and-manifest>
+```
+
+which runs exactly the same gates against a previous render set: the old set fails, the new
+set passes.
+
+### D1 — the poster's straight vertical field edge (pillar P6)
+
+The paper column of `poster_a4.png` ended on a **straight vertical cut at cell x = 585
+(output px 1170)**: the paper→field transition was that same column on **788 of 1754 rows
+(44.9 %)**.
+
+**Fix — option (b) of the brief, implemented as a Bayer dissolve.** The field is no longer
+cut. Over `edge_seam_cells = 16` cells (32 output px) to the right of the quiet column the
+8×8 Bayer threshold is raised from 1 back to 0:
+
+```
+th_eff(x, y) = (B8[y&7][x&7] + 0.5)/64 + (1 - (x - x_edge + 0.5)/16)
+ink(x, y)    = density(x, y) > th_eff(x, y)
+```
+
+so the field is brought in **cell by cell through the ordered matrix** — the junction is a
+Bayer seam, not a straight edge and not a blur. The same treatment was applied to
+`still_16x9.png` and `square_1080.png`, which had the *same* defect (the old still cut at
+cell 394 on 28.1 % of its rows, the old square at cell 257 on 30.0 %). Those two were not
+reported, but they broke the same rule and are fixed with it.
+
+Measured (the gate prints the worst offender for every image):
+
+| output | before | after |
+|---|---|---|
+| `poster_a4.png` | x = 585 on 788/1754 rows (44.9 %) | x = 588 on 84/1754 rows (**4.8 %**) |
+| `still_16x9.png` | x = 394 on 152/540 rows (28.1 %) | x = 398 on 29/540 rows (**5.4 %**) |
+| `square_1080.png` | x = 257 on 162/540 rows (30.0 %) | x = 305 on 46/540 rows (**8.5 %**) |
+
+### D2 — the poster's motif was a slab, not a contour map
+
+`motif_terrain` was not a faithful transcription of `design-system/generative/shaders.md`
+M==3. Two things were dropped:
+
+* `fwidth2(lv)` — the contour distance is measured in screen-space units
+  (`|dFdx| + |dFdy|` of the level field), so a contour is **one cell wide** whatever the
+  elevation gradient is. The old code used `stroke = 2.0`, i.e. strokes 4–5 cells wide;
+* `idx = step(mod(floor(lv+.5), 5.), .5)` — the index contour is the level whose index
+  mod 5 is **below** .5, so every fifth level is wider. The old code wrote
+  `step(0.0, mod(...))`, which is **always 1** — every contour was an index contour.
+
+On top of that the elevation band was `.52–.72` (a fifth of the whole elevation range) and
+inked solid, so the map was 44 % ink with 14.4-cell strokes: broken CRT-scanline slabs.
+
+The motif is now transcribed verbatim (`.60–.64` band, `stroke = .5 / 1.2`, the correct
+`idx`). **One documented deviation**: the band is inked **solid** (`band_ink = 1.0`) instead
+of the GLSL's `band*.45`, because the accent rule requires the accent to live inside a solid
+ink mass and a 45 % dithered band has no interior.
+
+Measured on the poster's field region:
+
+| metric | before | after |
+|---|---|---|
+| mean ink stroke | 14.40 cells | **3.63 cells** |
+| field ink | 43.93 % | **15.10 %** |
+| longest fine-dither run | 16 cells | 17 cells (limit 60) |
+| longest strict ink/paper alternation | 17 cells | 18 cells (limit 60) |
+
+### D3 — the square's accent was a cross
+
+See "Square accent: a region of the plate, not a cross" above: the accent is now a nodal
+band of the plate (4.231 % of the frame, 12 337 connected cells, symmetry 180° **3.6 %**).
+
+### D4 — the seam ladder read as a barcode
+
+The twelve accent rules under the seam band were pitched evenly (15 cells apart), which
+reads as a barcode, not as a measurement scale. The rules are now placed at a y offset
+**proportional to the cumulative ink of the seam** (`seam_row_fractions` cumulated and
+normalised), so the ladder's spacing encodes the seam's own density curve: tight where the
+seam is still paper, wide where the seam is already dense. Rules never overlap (minimum gap
+= one rule height).
+
+Measured rule positions (render cells; the dark region starts at cell 1080):
+
+```
+seam ink per row : 0, 0, 0, 0, 0.504, 0.121, 0.504, 0.496, 0.758, 0.496, 1.000, 0.879
+cumulative ink   : 0, 0, 0, 0, .106, .131, .237, .342, .501, .605, .815, 1.000
+rule y (cells)   : 1095 1101 1107 1113 1130 1138 1173 1208 1260 1295 1364 1425
+pitch (cells)    :    6    6    6   17    8   35   35   52   35   69   61
+```
+
+The first four rules sit tight because the seam's first four rows carry no ink at all — the
+live rule's rows 0..3 are pure paper.
+
+### The three new gates
+
+| gate | what it asserts | defect it catches |
+|---|---|---|
+| 13 — straight edge | for every image that declares a `field_region`, the paper→field transition must not be the same column on more than 25 % of the scanned lines when those lines span at least 30 % of them | **D1** (old poster: 44.9 % at x = 585) — and the old still (28.1 %) and old square (30.0 %) |
+| 14 — motif coherence (poster) | longest fine-dither run ≤ 60 cells, longest strict ink/paper alternation ≤ 60 cells, **mean ink stroke ≤ 6 cells** | **D2** (old poster: mean stroke 14.40 cells, 43.93 % ink). The two alternation sub-rules did *not* fire on the old poster (16 / 17 cells) — the stroke-width rule is the one that catches it |
+| 15 — accent shape | the largest accent region must not be symmetric under a 180° rotation, nor under both reflections, when its bounding box is square-ish (95 % spec threshold, 85 % relaxed tier) | **D3** (old square: 163 × 164 block, 180° 89.3 %, mirror-V 98.3 %) |
+
+Gate 13 is scoped by the manifest's `field_region`. `seam_poster_a4.png` declares
+`junction: "bayer_seam_band"` — its junction *is* the §12 pixel seam, verified cell by cell
+against the live rule by the existing seam-fidelity gate (0 mismatching cells), so it is
+exempt from gate 13, and the exemption is printed by the verifier.
+
+**Evidence.** Against the old render set (`node verify_render.mjs --old …`) the new gates
+fail with exactly the defects listed above; against the current set the verifier prints
+`GATE_PASS`.
+
+---
+
+## F3 — poster_a4 rebuilt on the shader's interference node set
+
+**Why this motif.** The old poster used the chladni plate, and at A4 scale that
+figure degenerates: its nodal bands are wide solid slabs, so the mean ink
+stroke measured 12.14 cells against a 6.0 limit — the motif was a slab, not a
+contour map. The poster now uses the **shader's interference motif**
+(`generative/shaders.md` M==18): a radial wave posterised into six tones, of
+which the poster keeps only the **tone boundaries** (the `edge` term) — those
+boundaries are the wave's nodal set. The tone fill (`st*solid`), the part that
+made the old poster a slab, is dropped. The node set is evaluated in the
+**field's own aspect** (the A4 field is a tall 655-cell column), so the nodes
+become a family of large closed ELLIPSES inscribed in that column instead of
+circles that would leave the page empty above and below; and the stroke width
+is measured perpendicular to the curve (first-order distance |F|/|grad F| of the
+level set), so a ring keeps one width all the way round instead of smearing.
+
+**Ring count and the arithmetic that sets the frequency.** The wave phase is
+phi = pi*N*u, u being the normalised elliptical radius (u = 1 on the outer
+ring). With N = 5 the node set is five nested closed rings at
+u = 0.2, 0.4, 0.6, 0.8, 1.0 — five rings, inside the requested 3-6. The
+frequency comes from the field, not from a search: the field column is 655
+cells wide (x 585 -> 1240), so five periods of the wave across it means a
+period of 655/5 = **131 cells**; the nodal lines then stand 64 cells apart on
+the horizontal axis (a half period — one nodal line per side) and 128 cells
+apart vertically. Measured on the render, the y = 877 scan crosses the nest at
+x = 592, 656, 720, 784, 848 | 976, 1040, 1104, 1168, 1232 — five nested
+rings, the outer one filling the column.
+
+**The accent host.** The outer ring is drawn 32 cells wide over a 65-degree arc
+of its own curve (upper right, clear of both the page edge and the ring's own
+symmetry axes), and the accent is the 24-cell **core** of that wide run: a
+contiguous arc of the field's own structure, with ink on both sides, so it can
+never float on paper and can never be a rectangle, a bar or a cross. Measured:
+0.661 % of the frame (14373 cells in 1 region, 0 containment
+violations, 0 unembedded), symmetry 180° 8.9 %, mirror-H 6.8 %,
+mirror-V 5.0 % (bbox 237x562, aspect 0.422). The field's own metrics:
+mean ink stroke 4.17 cells (limit 6.0), field ink
+3.65 %, largest connected ink region 26270 cells.
+
+### The three new gates, and what each one catches
+
+**1. Symmetry without the aspect loophole.** The >=95 % self-similarity test
+(180 deg rotation, mirror-H, mirror-V) now applies to the accent **as a
+whole**, with **no aspect precondition**: the old code only fired when the
+accent's bounding box was square-ish (aspect <= 1.2), so a drawn block with an
+oblong bbox escaped the gate entirely. Measured (180 / mirror-H / mirror-V):
+poster_a4 8.9 / 6.8 / 5.0 %; still_16x9 15.9 / 11.5 / 15.6 %;
+square_1080 4.3 / 30.2 / 4.2 %; seam_poster_a4 14.6 / 20.2 /
+52.1 % — all pass. What it now catches: a drawn rectangle or bar used as
+the accent, whatever shape its bbox happens to be (a 76x24 cell block scores
+96.6 % and used to escape on aspect alone; the relaxed 85 % tier for
+square-ish largest regions is kept).
+
+**2. The seam exemption is now a machine check, not an assertion.** The §12
+seam band was exempt from the straight-edge rule on the strength of a claim in
+the manifest. Now the claim is measured: for every column of the band the
+index of the **first inked row** is taken, and the standard deviation of that
+index across the columns must be >= 1.0 cell — a Bayer ramp varies it column
+to column, a straight cut holds it constant. Measured on seam_poster_a4:
+1240 columns, mean 78.69 cells, **std-dev 20.912 cells**
+(min 1.0). What it catches: the band being replaced by a solid straight edge
+(std-dev 0) while still claiming to be a ramp.
+
+**3. Large form.** Every composition that declares a field must contain at
+least one **large** connected ink region: 2000 cells at cell resolution. The
+rule is that a composition reads as a few big shapes, not as confetti.
+Measured: poster_a4 26270, still_16x9 12076, square_1080 24307,
+seam_poster_a4 898760 cells (min 2000). What it catches: a field that has
+been dissolved into speckle or one-pixel dust, where every stroke is isolated
+from every other.

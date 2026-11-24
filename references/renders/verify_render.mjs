@@ -40,6 +40,10 @@ import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// `node verify_render.mjs --old <dir>` runs the same gates against a previous
+// render set (manifest + PNGs in <dir>) — used to prove that a new gate really
+// does catch the defect it was written for.
+const USE_DIR = process.argv[2] === "--old" && process.argv[3] ? process.argv[3] : HERE;
 const failures = [];
 const notes = [];
 
@@ -169,7 +173,7 @@ function bayer8() {
 }
 const B8 = bayer8();
 
-const manifestPath = path.join(HERE, "render_manifest.json");
+const manifestPath = path.join(USE_DIR, "render_manifest.json");
 if (!fs.existsSync(manifestPath)) {
   console.log("GATE_FAIL: render_manifest.json not found");
   process.exit(1);
@@ -178,7 +182,7 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
 for (const out of manifest.outputs) {
   const label = out.path;
-  const file = path.join(HERE, out.path);
+  const file = path.join(USE_DIR, out.path);
   if (!fs.existsSync(file)) { fail(`${label}: file missing`); continue; }
 
   // ---- gate 1: geometry / integer upscale ------------------------------
@@ -274,6 +278,7 @@ for (const out of manifest.outputs) {
 
   // ---- gate 10: the accent is a solid block -----------------------------
   // Largest 4-connected accent region at cell resolution must be >= 9 cells.
+  let largestCells = [];
   {
     const minBlock = out.accent_min_block_cells ?? 9;
     const seenCell = new Uint8Array(cw * chh);
@@ -286,10 +291,12 @@ for (const out of manifest.outputs) {
         const stack = [cy * cw + cx];
         seenCell[cy * cw + cx] = 1;
         let size = 0, touchesInk = false;
+        const cells = [];
         while (stack.length) {
           const idx = stack.pop();
           const y = (idx / cw) | 0, x = idx - y * cw;
           size++;
+          cells.push([x, y]);
           const nb = [[-1, 0], [1, 0], [0, -1], [0, 1]];
           for (const [dx, dy] of nb) {
             const nx = x + dx, ny = y + dy;
@@ -303,7 +310,7 @@ for (const out of manifest.outputs) {
           }
         }
         if (!touchesInk) unembedded++;
-        if (size > largest) { largest = size; largestAt = `${sx},${sy}`; }
+        if (size > largest) { largest = size; largestAt = `${sx},${sy}`; largestCells = cells; }
       }
     }
     console.log(`   accent block: ${regions} regions, largest ${largest} cells (min ${minBlock}) at ${largestAt}, unembedded ${unembedded}`);
@@ -447,6 +454,252 @@ for (const out of manifest.outputs) {
       if (headRect && r.h > headRect.h)
         fail(`${label}: display rect "${r.text}" (h=${r.h}) is taller than the headline (h=${headRect.h})`);
     }
+  }
+
+  // ---- gate 13: no straight edge (the paper->field junction) -------------
+  // P6: "every dark<->light junction is a Bayer seam, never a straight edge
+  // and never a blur".  For every composition that declares a field region we
+  // scan, at cell resolution, where the paper ends and the field begins.  A
+  // straight edge is one column that is the transition on more than 25 % of
+  // the lines AND whose lines span at least 30 % of the composition.
+  // A composition whose junction IS a Bayer seam band (the §12 pixel seam)
+  // declares it and is exempt: the band is verified cell by cell against the
+  // live rule by the seam-fidelity gate below.
+  {
+    const fr = out.field_region;
+    if (fr) {
+      const hist = new Map();     // transition coord -> {n, minLine, maxLine}
+      let n = 0;
+      const scan = (get, len, base, line) => {
+        let t = -1;
+        for (let i = 0; i < len; i++) { const v = get(i); if (v !== 0) { t = i; break; } }
+        if (t < 0) return;
+        n++;
+        const key = t + base;
+        const e = hist.get(key) || { n: 0, min: line, max: line };
+        e.n++; if (line < e.min) e.min = line; if (line > e.max) e.max = line;
+        hist.set(key, e);
+      };
+      if (fr.axis === "x") {
+        for (let cy = fr.cell_y0; cy < fr.cell_y1; cy++)
+          scan((i) => cls[cy * cw + fr.cell_x0 + i], fr.cell_x1 - fr.cell_x0, fr.cell_x0, cy);
+      } else {
+        for (let cx = fr.cell_x0; cx < fr.cell_x1; cx++)
+          scan((i) => cls[(fr.cell_y0 + i) * cw + cx], fr.cell_y1 - fr.cell_y0, fr.cell_y0, cx);
+      }
+      const entries = [...hist.entries()].sort((a, b) => b[1].n - a[1].n);
+      const top = entries[0] || [null, { n: 0, min: 0, max: 0 }];
+      const dim = fr.axis === "x" ? img.height : img.width;
+      console.log(`   straight-edge (${fr.axis}-scan from ${fr.axis === "x" ? fr.cell_x0 : fr.cell_y0}): ` +
+        `${n} lines with a transition; worst ${fr.axis}=${top[0]} on ${top[1].n} lines ` +
+        `(${(100 * top[1].n / Math.max(1, n)).toFixed(1)}%), spanning lines ${top[1].min}..${top[1].max} ` +
+        `(${(100 * (top[1].max - top[1].min + 1) / Math.max(1, n)).toFixed(1)}% of the scanned lines)`);
+      if (fr.junction === "bayer_seam_band") {
+        // The seam band is no longer exempt BY ASSERTION: it is checked.  For
+        // every column of the band, find the first row of the band that
+        // carries ink.  A Bayer ramp varies that row from column to column; a
+        // straight cut would hold it constant.  The standard deviation of
+        // that index is the machine check that replaces the exemption.
+        const sm = out.seam;
+        const bandTop = Math.round(sm.y_top / up);
+        const bandRows = sm.rows * sm.cell;
+        const x0c = Math.round(sm.x0 / up);
+        const x1c = x0c + Math.round(sm.width / up);
+        const firsts = [];
+        for (let cx = x0c; cx < x1c; cx++) {
+          let first = -1;
+          for (let cy = bandTop; cy < bandTop + bandRows; cy++) {
+            if (cls[cy * cw + cx] !== 0) { first = cy - bandTop; break; }
+          }
+          if (first >= 0) firsts.push(first);
+        }
+        const mean = firsts.reduce((a, b) => a + b, 0) / Math.max(1, firsts.length);
+        const sd = Math.sqrt(firsts.reduce((a, b) => a + (b - mean) * (b - mean), 0) /
+                              Math.max(1, firsts.length));
+        console.log(`   seam band first-ink row: ${firsts.length} columns, ` +
+          `mean ${mean.toFixed(2)} cells, std-dev ${sd.toFixed(3)} cells (min 1.0)`);
+        if (sd < 1.0)
+          fail(`${label}: the seam band is a straight cut, not a Bayer ramp — the first-ink ` +
+            `row index varies by only ${sd.toFixed(3)} cells across columns (min 1.0)`);
+        else
+          console.log(`   straight-edge: exempt — this junction IS the §12 Bayer seam band ` +
+            `(proved by the first-ink-row std-dev ${sd.toFixed(3)} cells >= 1.0, and verified ` +
+            `cell by cell against the live rule by the seam-fidelity gate)`);
+      } else {
+        let worst = null;
+        for (const [coord, e] of entries) {
+          const span = e.max - e.min + 1;
+          if (e.n > 0.25 * n && span >= 0.30 * n)
+            if (!worst || e.n > worst[1].n) worst = [coord, e];
+        }
+        if (worst)
+          fail(`${label}: straight edge — the paper->field transition is at ${fr.axis}=${worst[0]} ` +
+            `(px ${worst[0] * up}) on ${worst[1].n} of ${n} lines (${(100 * worst[1].n / n).toFixed(1)}%, ` +
+            `limit 25%) spanning ${worst[1].max - worst[1].min + 1} lines ` +
+            `(${(100 * (worst[1].max - worst[1].min + 1) / n).toFixed(1)}% of the scanned lines, limit 30%): ` +
+            `a straight cut, not a Bayer seam`);
+      }
+    }
+  }
+
+  // ---- gate 14: motif coherence (the poster's field must read as contours)
+  // Three rules:
+  //  (a) the strict ink/paper alternation run (the signature of scanline
+  //      breakage) must stay under 60 cells;
+  //  (b) the longest run of fine dithering (every maximal ink AND paper
+  //      sub-run at most 2 cells) must stay under 60 cells;
+  //  (c) the STROKE WIDTH: the mean length of the ink runs in a row.  A
+  //      contour is a line (1-3 cells); the broken, slab-like terrain measured
+  //      11.6 cells per run with 38 % of the field inked — that is the defect
+  //      this gate exists to catch.
+  if (label === "poster_a4.png" && out.field_region) {
+    const fr = out.field_region;
+    let longestFine = 0, fineAt = null, longestAlt = 0, altAt = null;
+    let inkCells = 0, fieldCells = 0, runs = 0, runCells = 0;
+    for (let cy = fr.cell_y0; cy < fr.cell_y1; cy++) {
+      let run = 0;
+      for (let cx = fr.cell_x0 + 1; cx < fr.cell_x1; cx++) {
+        const a = cls[cy * cw + cx - 1] !== 0, b = cls[cy * cw + cx] !== 0;
+        if (a !== b) { run++; if (run > longestAlt) { longestAlt = run; altAt = [cx, cy]; } }
+        else run = 0;
+      }
+      const runsRow = [];
+      let v = cls[cy * cw + fr.cell_x0] !== 0 ? 1 : 0, l = 0;
+      for (let cx = fr.cell_x0; cx < fr.cell_x1; cx++) {
+        const b = cls[cy * cw + cx] !== 0 ? 1 : 0;
+        fieldCells++;
+        if (b) inkCells++;
+        if (b === v) l++;
+        else { runsRow.push([v, l]); if (v) { runs++; runCells += l; } v = b; l = 1; }
+      }
+      runsRow.push([v, l]); if (v) { runs++; runCells += l; }
+      let cur = 0, curStart = fr.cell_x0, x = fr.cell_x0;
+      for (const [val, len] of runsRow) {
+        if (len <= 2) {
+          if (cur === 0) curStart = x;
+          cur += len;
+          if (cur > longestFine) { longestFine = cur; fineAt = [curStart, cy]; }
+        } else cur = 0;
+        x += len;
+      }
+    }
+    const meanRun = runs ? runCells / runs : 0;
+    const inkPct = fieldCells ? (100 * inkCells) / fieldCells : 0;
+    console.log(`   motif coherence: longest fine-dither run ${longestFine} cells at ${fineAt}, ` +
+      `longest strict ink/paper alternation ${longestAlt} cells at ${altAt}, ` +
+      `mean ink stroke ${meanRun.toFixed(2)} cells, field ink ${inkPct.toFixed(2)}%`);
+    if (longestFine > 60)
+      fail(`${label}: the field contains a ${longestFine}-cell horizontal run of fine dithering ` +
+        `(at cell ${fineAt}) — the strokes are broken, not contours`);
+    if (longestAlt > 60)
+      fail(`${label}: the field contains a ${longestAlt}-cell horizontal alternation of ink and paper ` +
+        `(at cell ${altAt}) — the signature of scanline breakage`);
+    if (meanRun > 6.0)
+      fail(`${label}: the mean ink stroke is ${meanRun.toFixed(2)} cells (limit 6.0) with ` +
+        `${inkPct.toFixed(2)}% of the field inked — the motif is a slab, not a contour map`);
+  }
+
+  // ---- gate 15: the accent is a region, not a geometric cross -------------
+  // The accent must not be a drawn shape.  The test is applied to the accent
+  // AS A WHOLE — every accent cell — and there is NO aspect precondition:
+  // a rectangle or a bar is ~100 % self-similar under 180 deg rotation and
+  // under both mirrors, whatever shape its bounding box happens to be.  The
+  // old aspect loophole (a 76x24 cell block scored 96.6 % and used to pass
+  // because its bbox was not square-ish) is gone.
+  {
+    const cells = [];
+    for (let cy = 0; cy < chh; cy++)
+      for (let cx = 0; cx < cw; cx++)
+        if (cls[cy * cw + cx] === 2) cells.push([cx, cy]);
+    if (cells.length) {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const [x, y] of cells) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      const set = new Set(cells.map((c) => c[0] + "," + c[1]));
+      let s180 = 0, sH = 0, sV = 0;
+      for (const [x, y] of cells) {
+        if (set.has((x0 + x1 - x) + "," + (y0 + y1 - y))) s180++;
+        if (set.has(x + "," + (y0 + y1 - y))) sH++;
+        if (set.has((x0 + x1 - x) + "," + y)) sV++;
+      }
+      const n = cells.length;
+      const sc180 = s180 / n, scH = sH / n, scV = sV / n;
+      const maxSym = Math.max(sc180, scH, scV);
+      console.log(`   accent shape: ${n} accent cells, bbox ${w}x${h} cells ` +
+        `(aspect ${(w / h).toFixed(3)}), ` +
+        `symmetry 180° ${(sc180 * 100).toFixed(1)}%, mirror-H ${(scH * 100).toFixed(1)}%, ` +
+        `mirror-V ${(scV * 100).toFixed(1)}%`);
+      if (maxSym >= 0.95)
+        fail(`${label}: the accent is a drawn shape — ${n} cells, bbox ${w}x${h}, ` +
+          `sym180 ${(sc180 * 100).toFixed(1)}%, mirror-H ${(scH * 100).toFixed(1)}%, ` +
+          `mirror-V ${(scV * 100).toFixed(1)}% (limit 95%, no aspect exemption): ` +
+          `it is a geometric block, not a region of the field's structure`);
+    }
+    // the largest single accent region, with the relaxed square-ish tier
+    {
+      const cells = largestCells;
+      if (cells.length) {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const [x, y] of cells) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      const set = new Set(cells.map((c) => c[0] + "," + c[1]));
+      let s180 = 0, sH = 0, sV = 0;
+      for (const [x, y] of cells) {
+        if (set.has((x0 + x1 - x) + "," + (y0 + y1 - y))) s180++;
+        if (set.has(x + "," + (y0 + y1 - y))) sH++;
+        if (set.has((x0 + x1 - x) + "," + y)) sV++;
+      }
+      const n = cells.length;
+      const sc180 = s180 / n, scH = sH / n, scV = sV / n;
+      const squareish = Math.max(w, h) / Math.min(w, h) <= 1.2;
+      const maxSym = Math.max(sc180, scH, scV);
+      console.log(`   accent region: largest ${n} cells, bbox ${w}x${h} cells ` +
+        `(aspect ${(w / h).toFixed(3)}, square-ish ${squareish}), ` +
+        `symmetry 180° ${(sc180 * 100).toFixed(1)}%, mirror-H ${(scH * 100).toFixed(1)}%, ` +
+        `mirror-V ${(scV * 100).toFixed(1)}%`);
+      if (squareish && maxSym >= 0.85)
+        fail(`${label}: the largest accent region is a geometric cross — a ${w}x${h} cell block ` +
+          `(square-ish) with sym180 ${(sc180 * 100).toFixed(1)}%, mirror-H ${(scH * 100).toFixed(1)}%, ` +
+          `mirror-V ${(scV * 100).toFixed(1)}% (relaxed limit 85%): it is a drawn shape, not a region ` +
+          `of the field's structure`);
+      }
+    }
+  }
+
+  // ---- gate 16: large form ----------------------------------------------
+  // A field must contain at least one LARGE connected mass: 2000 cells at
+  // cell resolution.  This is the "large form" rule — a composition has to
+  // read as a few big shapes, not as confetti or dust.  The largest
+  // connected ink region (ink + accent, i.e. the drawn mass) is measured
+  // for every composition that declares a field.
+  if (out.field_region) {
+    const seen = new Uint8Array(cw * chh);
+    const stack = new Int32Array(cw * chh);
+    let best = 0, bestAt = null;
+    for (let i = 0; i < cw * chh; i++) {
+      if (cls[i] === 0 || seen[i]) continue;
+      let sp = 0, size = 0;
+      stack[sp++] = i; seen[i] = 1;
+      while (sp > 0) {
+        const j = stack[--sp]; size++;
+        const x = j % cw, y = (j / cw) | 0;
+        if (x > 0 && cls[j - 1] !== 0 && !seen[j - 1]) { seen[j - 1] = 1; stack[sp++] = j - 1; }
+        if (x < cw - 1 && cls[j + 1] !== 0 && !seen[j + 1]) { seen[j + 1] = 1; stack[sp++] = j + 1; }
+        if (y > 0 && cls[j - cw] !== 0 && !seen[j - cw]) { seen[j - cw] = 1; stack[sp++] = j - cw; }
+        if (y < chh - 1 && cls[j + cw] !== 0 && !seen[j + cw]) { seen[j + cw] = 1; stack[sp++] = j + cw; }
+      }
+      if (size > best) { best = size; bestAt = `${i % cw},${(i / cw) | 0}`; }
+    }
+    console.log(`   large form: largest connected ink region ${best} cells at ${bestAt} (min 2000)`);
+    if (best < 2000)
+      fail(`${label}: the largest connected ink region is ${best} cells (min 2000) — ` +
+        `the field has no large form`);
   }
 
   // ---- seam gates: only for the composition that declares a seam ---------

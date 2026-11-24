@@ -162,11 +162,38 @@ def fwidth2(arr):
 # so the accent stays a small fraction of the frame.
 # --------------------------------------------------------------------------
 def motif_terrain(uvx, uvy, asp, t, zoom=1.0, band=0.62, sigma=0.06, band_ink=1.0,
-                  band_lo=0.56, band_hi=0.68, stroke=2.0, stroke_hi=2.6):
+                  band_lo=0.60, band_hi=0.64, stroke=0.5, stroke_hi=1.2):
     """M==3 — terrain: topographic contours, index contours, one elevation band.
 
-    The elevation band is inked SOLID (band_ink) so the accent — which may only
-    live inside ink — has a mass to sit in."""
+    Transcribed VERBATIM from design-system/generative/shaders.md §"M==3":
+
+        p   = q*1.15 + vec2(t*.025, 0.)
+        hh  = .7*fbm3(p) + .3*fbm3(p*1.9+3.7) + lens*.18
+        lv  = hh*16.;  fl = fract(lv);  dd = min(fl, 1.-fl)/fwidth2(lv)
+        idx = step(mod(floor(lv+.5), 5.), .5)      // 1 when the level index mod 5 < .5
+        line  = 1. - smoothstep(.5+idx*.9, 1.2+idx*1.1, dd)
+        hx  = fbm3(p+vec2(.01,0.)) - fbm3(p)
+        shade = clamp(-hx*38., 0., 1.)*.24
+        band = step(.60, hh)*step(hh, .64)
+        return vec2(max(line, shade) + band*.45, band)
+
+    The two details the earlier transcription dropped, and which decide whether
+    the motif reads as a contour map at all:
+
+      * `fwidth2(lv)` — the contour distance is measured in SCREEN-SPACE units
+        (|dFdx| + |dFdy| of the level field), so a contour is ONE cell wide
+        whatever the elevation gradient is.  Without it the strokes are
+        arbitrarily wide and the map degenerates into blotches.
+      * `idx = step(mod(floor(lv+.5), 5.), .5)` — the index contour is the level
+        whose index mod 5 is BELOW .5, i.e. every fifth level is wider
+        (smoothstep .5+.9 -> 1.2+1.1 instead of .5 -> 1.2).
+
+    ONE documented deviation from the GLSL: the elevation band is inked SOLID
+    (band_ink = 1.0) instead of `band*.45`.  The system's accent rule (see
+    NOTES.md) requires the accent to live inside a SOLID ink mass, and a 45%
+    dithered band has no interior.  The band stays narrow (.60-.64) so it
+    reads as the highlighted elevation band of the map.
+    """
     qx = uvx * asp
     qy = uvy
     px = (qx * 1.15 + t * 0.025) * zoom
@@ -176,15 +203,16 @@ def motif_terrain(uvx, uvy, asp, t, zoom=1.0, band=0.62, sigma=0.06, band_ink=1.
     fl = fract(lv)
     fw = fwidth2(lv)
     dd = np.minimum(fl, 1.0 - fl) / fw
-    idx = step(0.0, np.mod(np.floor(lv + 0.5), 5.0))
-    # contour strokes are inked SOLID (several cells wide) so the accent can
-    # live in their interior without ever touching paper
+    # idx: GLSL step(edge, x) = x >= edge  ->  1 when mod(index, 5) < 0.5
+    idx = np.where(np.mod(np.floor(lv + 0.5), 5.0) < 0.5, 1.0, 0.0)
+    # contour strokes: ONE cell wide (in fwidth units), index contours wider
     line = 1.0 - smoothstep(stroke + idx * 0.9, stroke_hi + idx * 1.1, dd)
     hx = fbm3(px + 0.01, py) - fbm3(px, py)
     shade = np.clip(-hx * 38.0, 0.0, 1.0) * 0.24
     inband = step(band_lo, hh) * step(hh, band_hi)
     ink = np.maximum(line, shade) + inband * band_ink
-    # continuous colour field: a gaussian ridge on the elevation band
+    # continuous colour field: a gaussian ridge on the elevation band, so the
+    # accent can be carved out of the band's core
     col = np.exp(-(((hh - band) / sigma) ** 2))
     return ink, col
 
@@ -217,40 +245,233 @@ def motif_shader(uvx, uvy, asp, t, center_cx=0.72, solid=0.90):
     return ink, col
 
 
-def motif_chladni(uvx, uvy, asp, t, col_w=0.030, ring_w=0.055):
+def _ring_levels(rings):
+    """The nodal radii of the wave, as fractions of the outermost ring.
+
+    The wave's phase is pi*rings*u (u = normalised elliptical radius), so
+    its nodes stand at u = k/rings: `rings` nested closed rings."""
+    return [(k + 1) / float(rings) for k in range(rings)]
+
+
+def interference_arc(Wc, Hc, field, p):
+    """The interference ring field, and the accent arc it hosts, in CELL space.
+
+    Lineage: shaders.md M==18 (shader) — a radial wave posterised into six
+    tones, of which the poster keeps only the tone BOUNDARIES (the `edge`
+    term).  Those boundaries are the nodal set of the wave: at poster scale
+    they are large closed rings, while the tone FILL (`st*solid`) — the part
+    that made the old poster a slab — is dropped.
+
+    Three deliberate departures from the screen shader, all forced by print
+    scale:
+
+      1. the wave is evaluated in the FIELD's own aspect (the poster's field
+         is a tall column), so the node set becomes a family of large CLOSED
+         ELLIPSES inscribed in that column instead of circles that would
+         leave the page empty above and below;
+      2. the stroke width is measured PERPENDICULAR to the curve, in cells,
+         via the first-order distance |F|/|grad F| of the level set, so a ring
+         keeps one width all the way round instead of smearing;
+      3. the rings are homothetic about one centre, so the tone boundaries
+         nest exactly the way the shader's own radial wave nests.
+
+    FREQUENCY, by arithmetic and not by search.  The wave's phase is
+    pi*rings*u, u being the normalised elliptical radius (u = 1 at the
+    outermost ring).  Across the field width u runs 1 -> 0 -> 1, so the phase
+    advances rings full periods: with rings = 5 the field's 655-cell width
+    carries five periods of the wave, one period per 131 cells, and the node
+    set is the closed ring family at u = 0.2, 0.4, 0.6, 0.8, 1.0 — five
+    nested rings, the outermost spanning the whole column.
+
+    THE ACCENT is carved out of the field's own structure: the outermost ring
+    is drawn WIDE over a contiguous ARC of itself (a run of the curve, which
+    cannot be a rectangle, a bar or a cross), and the accent is the CORE of
+    that wide run — a band with ink on both sides, so it can never float on
+    paper.
+    """
+    rings = int(p.get("rings", 5))
+    hw_thin = float(p.get("hw_thin", 1.0))
+    hw_host = float(p.get("hw_host", 20.0))
+    accent_half = float(p.get("accent_half", 16.0))
+    th0 = float(p.get("accent_t0", -60.0))
+    th1 = float(p.get("accent_t1", 15.0))
+    taper_deg = float(p.get("taper_deg", 4.0))
+    cx_frac = float(p.get("cx_frac", 0.5))
+    ax_frac = float(p.get("ax_frac", 0.5))
+    margin_x = float(p.get("margin_x", 8.0))
+    margin_y = float(p.get("margin_y", 40.0))
+    x0, x1, y0, y1 = [float(v) for v in field]
+    fw = x1 - x0
+    fh = y1 - y0
+    cx = x0 + cx_frac * fw
+    cy = 0.5 * (y0 + y1)
+    ax = ax_frac * fw - margin_x
+    by = 0.5 * fh - margin_y
+    X = (np.arange(Wc, dtype=np.float64) + 0.5)[None, :] - cx
+    Y = (np.arange(Hc, dtype=np.float64) + 0.5)[:, None] - cy
+    ink = np.zeros((Hc, Wc), dtype=bool)
+    accent = np.zeros((Hc, Wc), dtype=bool)
+    for k, lv in enumerate(_ring_levels(rings)):
+        a = ax * lv
+        b = by * lv
+        F = (X / a) ** 2 + (Y / b) ** 2 - 1.0
+        g = 2.0 * np.sqrt((X / (a * a)) ** 2 + (Y / (b * b)) ** 2)
+        d = np.abs(F) / np.maximum(g, 1e-9)      # ~perpendicular distance, cells
+        if k != rings - 1:
+            ink |= d < hw_thin
+            continue
+        # the host ring: wide over a contiguous arc of its own curve
+        th = np.degrees(np.arctan2(Y / b, X / a))
+        ramp = np.clip(np.minimum((th - th0) / taper_deg,
+                                  (th1 - th) / taper_deg), 0.0, 1.0)
+        hw = hw_thin + (hw_host - hw_thin) * ramp
+        ink |= d < hw
+        # the CORE of that wide run: a contiguous band with ink on both sides
+        accent |= (d < accent_half) & (ramp >= 1.0)
+    return {"ink": ink, "accent": accent, "field": (x0, x1, y0, y1),
+            "rings": rings, "cx": cx, "cy": cy, "ax": ax, "by": by}
+
+
+def motif_interference(uvx, uvy, asp, t, cell_w, cell_h, field, **p):
+    """The interference motif at poster scale (see interference_arc).
+
+    Ink is hard-edged (density 0 or 1): the strokes are drawn 1-bit, so the
+    ordered matrix has nothing to dissolve except the field's own edge."""
+    f = interference_arc(int(cell_w), int(cell_h), field, dict(p, t=t))
+    ink = f["ink"].astype(np.float64)
+    col = f["accent"].astype(np.float64)
+    return ink, col
+
+
+def chladni_fields(uvx, uvy, asp, t, col_w=0.030, ring_w=0.055,
+                   n_mode=None, m_mode=None, kx=None, ky=None,
+                   cx_uv=None, cy_uv=None, hw=None, sand=None,
+                   cell_h=None, band_cells=None, ring_on=True,
+                   hw_wide=0.0, wide_win=None):
     """M==0 — chladni: crisp nodal lines, sand halo, beat ring at 120 bpm.
 
-    The beat ring is inked as a solid annulus so the accent has a mass."""
+    The beat ring is inked as a solid annulus so the accent has a mass.
+
+    The individual structures are returned separately so the accent can be
+    carved OUT of the field's own structure (see accent_from_nodal) instead of
+    being a drawn shape.
+
+    TWO WAYS TO CALL IT:
+
+      * LEGACY (hw is None) — the square composition: the mode numbers and the
+        beat ring come from `t`, and the stroke width is measured in the
+        VALUE domain (|v| < w*2.5..w*4).  Unchanged behaviour.
+
+      * LARGE-FORM (hw is not None) — the A4 poster: the mode numbers
+        (n_mode, m_mode), the two spatial frequencies (kx, ky), the plate
+        centre (cx_uv, cy_uv) and the stroke width are given explicitly, and
+        the stroke width is measured in the SCREEN domain: `hw` cells
+        half-width, using the local gradient g = fwidth2(v), exactly the trick
+        the terrain motif uses for its one-cell contours.  A nodal line is
+        therefore `hw` cells wide whatever the local slope of v is, so the
+        plate can be scaled UP to poster size without the strokes smearing
+        into slabs.  The strokes are BINARY (no intermediate tone), so the
+        field stays a 1-bit line drawing: no long dither runs, no broken
+        strokes.
+
+        `band_cells` additionally yields the WIDE nodal band — the same nodal
+        set, `band_cells` cells half-width.  That band is the host the poster's
+        accent is carved out of: the accent is a run of the plate's own nodal
+        line, not a drawn shape (see accent_from_band).
+
+        `ring_on=False` drops the beat ring: it is a device of the square
+        composition, and at poster scale it would be a perfect circle in the
+        middle of the plate.
+
+    The q-space is isotropic in cells: qx = uvx*asp, so one unit of qx and one
+    unit of qy are both Hc cells wide (asp = Wc/Hc).
+    """
     qx = uvx * asp
     qy = uvy
     beat = fract(t * 2.0)
     env = np.exp(-beat * 6.0)
     ph = t * 0.09
-    n = 2.0 + 1.5 * (1.0 + np.sin(ph))
-    m = 5.0 + 1.5 * (1.0 + np.cos(ph * 0.7))
-    ccx = (qx - asp * 0.66) * np.pi * 0.95
-    ccy = (qy - 0.5) * np.pi * 0.95
-    v = (np.cos(n * ccx) * np.cos(m * ccy) - np.cos(m * ccx) * np.cos(n * ccy))
-    w = 0.05 + 0.05 * env
-    av = np.abs(v)
-    line = 1.0 - smoothstep(w * 2.5, w * 4.0, av)
-    sand = (1.0 - smoothstep(w * 2.0, w * 6.0, av)) * 0.38
-    dx = qx - asp * 0.66
-    dy = qy - 0.5
+    legacy = hw is None
+    if legacy:
+        n = 2.0 + 1.5 * (1.0 + np.sin(ph))
+        m = 5.0 + 1.5 * (1.0 + np.cos(ph * 0.7))
+        cx_uv = 0.66
+        cy_uv = 0.5
+        ccx = (qx - asp * cx_uv) * np.pi * 0.95
+        ccy = (qy - cy_uv) * np.pi * 0.95
+        v = (np.cos(n * ccx) * np.cos(m * ccy) - np.cos(m * ccx) * np.cos(n * ccy))
+        w = 0.05 + 0.05 * env
+        av = np.abs(v)
+        line = 1.0 - smoothstep(w * 2.5, w * 4.0, av)
+        sd = (1.0 - smoothstep(w * 2.0, w * 6.0, av)) * 0.38
+        band = None
+    else:
+        n = float(n_mode)
+        m = float(m_mode)
+        # ISOTROPIC-IN-CELLS space: one unit of px/py is Hc cells in BOTH
+        # directions (asp = Wc/Hc), so kx and ky are directly comparable.
+        px = (uvx - cx_uv) * asp
+        py = uvy - cy_uv
+        ccx = px * kx
+        ccy = py * ky
+        v = (np.cos(n * ccx) * np.cos(m * ccy) - np.cos(m * ccx) * np.cos(n * ccy))
+        av = np.abs(v)
+        # screen-space stroke width: |v| is measured against the local
+        # gradient g, so a nodal line is `hw` cells half-wide whatever the
+        # local slope is.  The strokes are BINARY.
+        g = fwidth2(v)
+        line = (av <= hw * g).astype(np.float64)
+        # the HIGHLIGHTED INDEX CONTOUR: the same nodal set, drawn wide, and
+        # only inside `wide_win` — the plate's own structure, one contour
+        # emphasised.  It is the host the accent is carved out of.
+        band = None
+        if band_cells:
+            band = (av <= float(band_cells) * g).astype(np.float64)
+            if wide_win is not None:
+                wx0, wx1, wy0, wy1 = wide_win
+                wm = ((UVX >= wx0) & (UVX <= wx1) &
+                      (UVY >= wy0) & (UVY <= wy1))
+                band = band * wm
+            line = np.maximum(line, band)
+        sd = (1.0 - smoothstep(2.0 * hw * g, 6.0 * hw * g, av)) * float(sand or 0.0)
+    dx = qx - asp * (cx_uv if cx_uv is not None else 0.66)
+    dy = qy - (cy_uv if cy_uv is not None else 0.5)
     r = np.sqrt(dx * dx + dy * dy)
     d = np.abs(r - beat * 1.25)
-    ring = (1.0 - smoothstep(0.0, 0.012, d)) * env
-    annulus = np.exp(-((d / ring_w) ** 2)) * env
-    ink = np.maximum(line, sand) + ring * 0.9 + annulus * 0.95
+    if legacy:
+        ring = (1.0 - smoothstep(0.0, 0.012, d)) * env
+        annulus = np.exp(-((d / ring_w) ** 2)) * env
+    elif ring_on:
+        # the ring is measured in CELLS (one q unit = cell_h cells)
+        d_cells = d * float(cell_h)
+        ring = (1.0 - smoothstep(0.0, 1.6 * hw, d_cells)) * env
+        annulus = np.exp(-((d_cells / (ring_w * float(cell_h))) ** 2)) * env
+    else:
+        # the beat ring is a device of the square composition; at poster scale
+        # it would be a perfect circle in the middle of the plate.
+        ring = np.zeros_like(v)
+        annulus = np.zeros_like(v)
+    ink = np.maximum(line, sd) + ring * 0.9 + annulus * 0.95
     # continuous colour field: a gaussian ridge on the beat ring
     col = np.exp(-((d / col_w) ** 2)) * env
-    return ink, col
+    return {"ink": ink, "col": col, "line": line, "sand": sd, "ring": ring,
+            "annulus": annulus, "v": v, "env": env, "beat": beat, "band": band,
+            "cx": asp * (cx_uv if cx_uv is not None else 0.66),
+            "cy": (cy_uv if cy_uv is not None else 0.5),
+            "cx_uv": (cx_uv if cx_uv is not None else 0.66),
+            "n": n, "m": m}
+
+
+def motif_chladni(uvx, uvy, asp, t, **kw):
+    f = chladni_fields(uvx, uvy, asp, t, **kw)
+    return f["ink"], f["col"]
 
 
 MOTIFS = {
     "terrain": motif_terrain,
     "shader": motif_shader,
     "chladni": motif_chladni,
+    "interference": motif_interference,
 }
 
 
@@ -620,6 +841,362 @@ def calibrate_accent(col, is_ink, region, target=ACCENT_TARGET,
     return best[1], best[0], best[2]
 
 
+def sector_mask(Wc, Hc, cx_uv, cy_uv, r0, r1, a0, a1, asp=None):
+    """A wedge of the field, in CELL coordinates (x and y share the scale).
+
+    Used to carve the accent: a run of the field's structure clipped to a
+    sector is a CURVE, so the accent cannot be a mirror-symmetric bar.
+    """
+    asp = (Wc / float(Hc)) if asp is None else asp
+    xs = np.arange(Wc) + 0.5
+    ys = np.arange(Hc) + 0.5
+    dx = xs[None, :] - cx_uv * Wc
+    dy = ys[:, None] - cy_uv * Hc
+    r = np.sqrt(dx * dx + dy * dy)
+    a = np.degrees(np.arctan2(dy, dx))
+    return (r >= r0) & (r <= r1) & (a >= a0) & (a <= a1)
+
+
+def dilate(mask, radius):
+    """Binary dilation by `radius` cells (4-connected, Manhattan ball).
+
+    No scipy: the mask is grown by repeated shifted ORs, which is exact for
+    a Manhattan ball and fast enough at poster size.
+    """
+    out = mask.copy()
+    for _ in range(int(radius)):
+        nxt = out.copy()
+        nxt[1:, :] |= out[:-1, :]
+        nxt[:-1, :] |= out[1:, :]
+        nxt[:, 1:] |= out[:, :-1]
+        nxt[:, :-1] |= out[:, 1:]
+        out = nxt
+    return out
+
+
+def chladni_index_band(spec, params, Wc, Hc):
+    """The plate's OWN nodal line, drawn wide: the highlighted index contour.
+
+    The chladni figure is a field of thin nodal curves.  A topo map draws
+    every N-th contour wider and stronger — the same idea here: one nodal
+    curve of the plate is drawn as a WIDE SOLID BAND, and the accent is
+    carved out of that band.  The accent therefore follows the field's own
+    structure; it cannot be a floating rectangle.
+
+    The band is the nodal line dilated by `radius` cells, restricted to
+    `strip` (uv fractions), so exactly ONE curve is emphasised.
+    """
+    idx = spec.get("index_contour") or {}
+    radius = int(idx.get("radius", 0))
+    if not radius:
+        return None
+    strip = idx.get("strip", (0.0, 1.0, 0.0, 1.0))
+    asp = Wc / float(Hc)
+    UVX, UVY = np.meshgrid((np.arange(Wc) + 0.5) / Wc, (np.arange(Hc) + 0.5) / Hc)
+    p = dict(col_w=0.030, ring_w=0.055, cell_h=Hc)
+    p.update(params)
+    f = chladni_fields(UVX, UVY, asp, spec["t"], **p)
+    line = f["line"] > 0
+    sx0, sx1, sy0, sy1 = strip
+    smask = ((UVX >= sx0) & (UVX <= sx1) & (UVY >= sy0) & (UVY <= sy1))
+    band = dilate(line & smask, radius)
+    return band
+
+
+def region_symmetry(cells):
+    """Self-similarity of a cell set under 180 deg rotation and both mirrors.
+
+    Returns (s180, sH, sV) in [0,1]: the fraction of cells whose image under
+    each transform is also in the set.  A drawn rectangle scores 1.0 on all
+    three; a band that follows a curve does not."""
+    if not cells:
+        return (0.0, 0.0, 0.0)
+    xs = [c[0] for c in cells]
+    ys = [c[1] for c in cells]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    s = set(cells)
+    n = float(len(cells))
+    s180 = sum(1 for (x, y) in cells if (x0 + x1 - x, y0 + y1 - y) in s) / n
+    sH = sum(1 for (x, y) in cells if (x, y0 + y1 - y) in s) / n
+    sV = sum(1 for (x, y) in cells if (x0 + x1 - x, y) in s) / n
+    return (s180, sH, sV)
+
+
+def chladni_ribbon(spec, params, Wc, Hc):
+    """The WIDE nodal band of the plate, clipped to the declared window.
+
+    This is the host the poster's accent is carved from: it is the plate's own
+    nodal line, drawn wide (like a highlighted index contour), so the accent
+    is a run of the field's structure rather than a shape drawn on top."""
+    win = spec.get("accent_window") or {}
+    wx = win.get("x", (0.0, 1.0))
+    wy = win.get("y", (0.0, 1.0))
+    asp = Wc / float(Hc)
+    UVX, UVY = np.meshgrid((np.arange(Wc) + 0.5) / Wc, (np.arange(Hc) + 0.5) / Hc)
+    p = dict(col_w=0.030, ring_w=0.055, cell_h=Hc)
+    p.update(params)
+    f = chladni_fields(UVX, UVY, asp, spec["t"], **p)
+    if f.get("band") is None:
+        return None, f
+    box = np.zeros((Hc, Wc), dtype=bool)
+    x0 = int(round(wx[0] * Wc)); x1 = int(round(wx[1] * Wc))
+    y0 = int(round(wy[0] * Hc)); y1 = int(round(wy[1] * Hc))
+    box[max(0, y0):max(0, y1), max(0, x0):max(0, x1)] = True
+    return (f["band"] > 0) & box, f
+
+
+def accent_from_band(spec, params, is_ink, region):
+    """F1 — the accent is carved OUT of the plate's own wide nodal band.
+
+    The band is the plate's nodal line drawn wide (an index contour), so the
+    accent follows the field's structure: it cannot be a floating rectangle.
+
+    Rules kept from the general accent rule:
+      * the accent only exists where the cell was ALREADY inked;
+      * it is embedded in the ink mass (interior cells), so it can never
+        float on paper;
+      * it is a MASS (>= 9 connected cells), never a hairline;
+      * it covers 0.5-5 % of the frame;
+      * it is NOT geometrically symmetric: a run of a curve is not, a drawn
+        rectangle is (see region_symmetry).
+    """
+    Wc, Hc = spec["cell_w"], spec["cell_h"]
+    total = float(Hc * Wc)
+    target = float(spec.get("accent_target", ACCENT_TARGET))
+    max_sym = float(spec.get("accent_max_symmetry", 0.85))
+    fmin, fmax = spec.get("accent_frac_range", (ACCENT_MIN, ACCENT_MAX))
+    ribbon, f = chladni_ribbon(spec, params, Wc, Hc)
+    if ribbon is None:
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    inner = interior_ink(is_ink)
+    cand = ribbon & region & is_ink & inner
+    best = None
+    if cand.sum():
+        lab, sizes = components(cand)
+        for cid in range(1, len(sizes)):
+            size = int(sizes[cid])
+            if size < ACCENT_MIN_BLOCK_CELLS:
+                continue
+            frac = size / total
+            if frac < fmin or frac > fmax:
+                continue
+            cells = [(int(x), int(y)) for y, x in np.argwhere(lab == cid)]
+            sym = region_symmetry(cells)
+            if max(sym) > max_sym:
+                continue
+            score = (0 if fmin <= frac <= fmax else 1, abs(frac - target))
+            if best is None or score < best[0]:
+                best = (score, lab == cid, frac, size, sym)
+    if best is None:
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    return best[1], best[2], best[3], best[4]
+
+
+def accent_from_index(spec, params, is_ink, region):
+    """F1 — the accent is carved OUT of the plate's highlighted index contour.
+
+    The contour is the plate's own nodal curve, drawn wide, so the accent is
+    a run of the field's structure: a curve with a thickness, not a drawn
+    rectangle.
+
+    Rules kept from the general accent rule:
+      * the accent only exists where the cell was ALREADY inked;
+      * it is embedded in the ink mass (interior cells), so it can never
+        float on paper;
+      * it is a MASS (>= 9 connected cells), never a hairline;
+      * it covers 0.5-5 % of the frame;
+      * it is NOT geometrically symmetric: a curved run is not, a drawn
+        rectangle or bar is (see region_symmetry).
+    """
+    Wc, Hc = spec["cell_w"], spec["cell_h"]
+    total = float(Hc * Wc)
+    target = float(spec.get("accent_target", ACCENT_TARGET))
+    max_sym = float(spec.get("accent_max_symmetry", 0.85))
+    fmin, fmax = spec.get("accent_frac_range", (ACCENT_MIN, ACCENT_MAX))
+    band = chladni_index_band(spec, params, Wc, Hc)
+    if band is None:
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    win = spec.get("accent_window") or {}
+    wx = win.get("x", (0.0, 1.0))
+    wy = win.get("y", (0.0, 1.0))
+    box = np.zeros((Hc, Wc), dtype=bool)
+    x0 = int(round(wx[0] * Wc)); x1 = int(round(wx[1] * Wc))
+    y0 = int(round(wy[0] * Hc)); y1 = int(round(wy[1] * Hc))
+    box[max(0, y0):max(0, y1), max(0, x0):max(0, x1)] = True
+    inner = interior_ink(is_ink)
+    cand = band & box & region & is_ink & inner
+    best = None
+    if cand.sum():
+        lab, sizes = components(cand)
+        for cid in range(1, len(sizes)):
+            size = int(sizes[cid])
+            if size < ACCENT_MIN_BLOCK_CELLS:
+                continue
+            frac = size / total
+            if frac < fmin or frac > fmax:
+                continue
+            cells = [(int(x), int(y)) for y, x in np.argwhere(lab == cid)]
+            sym = region_symmetry(cells)
+            if max(sym) > max_sym:
+                continue
+            score = (0 if fmin <= frac <= fmax else 1, abs(frac - target))
+            if best is None or score < best[0]:
+                best = (score, lab == cid, frac, size, sym)
+    if best is None:
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    return best[1], best[2], best[3], best[4]
+
+
+def accent_from_nodal(spec, params, is_ink, region):
+    """D3 — the accent is a contiguous region of the FIELD'S OWN STRUCTURE.
+
+    It is carved out of the chladni NODAL BANDS (the solid ink of the plate's
+    standing-wave pattern), on ONE SIDE of the plate's axis.  Because the
+    nodal pattern is even under a 180° rotation about that axis, taking only
+    one side guarantees the accent cannot be a symmetric cross: it is a
+    curved band that follows a nodal line.
+
+    `accent_window` (optional) restricts the carve to a rectangle of the
+    field, given as fractions of the plate: {"x": (x0, x1), "y": (y0, y1)}.
+    That is what keeps the carve from being symmetric about its OWN bounding
+    box: a band that runs the full height of an even pattern is symmetric
+    top-to-bottom, so a window breaks that symmetry as well.
+
+    Rules kept from the general accent rule:
+      * the accent only exists where the cell was ALREADY inked;
+      * it is a MASS (>= 9 connected cells), never a hairline;
+      * it is embedded in the ink mass (every accent cell has ink on all four
+        sides), so it can never float on paper;
+      * it covers 0.5-5 % of the frame;
+      * it is NOT geometrically symmetric (see region_symmetry): a drawn
+        rectangle or bar fails, a band that follows the field's structure does
+        not.
+    """
+    Wc, Hc = spec["cell_w"], spec["cell_h"]
+    asp = Wc / float(Hc)
+    UVX, UVY = np.meshgrid((np.arange(Wc) + 0.5) / Wc, (np.arange(Hc) + 0.5) / Hc)
+    p = dict(col_w=0.030, ring_w=0.055, cell_h=spec["cell_h"])
+    p.update(params)
+    f = chladni_fields(UVX, UVY, asp, spec["t"], **p)
+
+    axis_x = int(round(f["cx_uv"] * Wc))
+    split = axis_x + int(spec.get("accent_split_cells", 0))
+    side = np.zeros((Hc, Wc), dtype=bool)
+    side[:, max(0, split):] = True
+
+    win = spec.get("accent_window")
+    if win:
+        wx = win.get("x", (0.0, 1.0))
+        wy = win.get("y", (0.0, 1.0))
+        box = np.zeros((Hc, Wc), dtype=bool)
+        x0 = int(round(wx[0] * Wc)); x1 = int(round(wx[1] * Wc))
+        y0 = int(round(wy[0] * Hc)); y1 = int(round(wy[1] * Hc))
+        box[y0:y1, x0:x1] = True
+        side &= box
+    sec = spec.get("accent_sector")
+    if sec:
+        # a wedge of the plate: the carve is a CURVE, not a bar, so it cannot
+        # be symmetric about its own bounding box
+        side &= sector_mask(Wc, Hc, sec["cx_uv"], sec["cy_uv"],
+                            sec["r0"], sec["r1"], sec["a0"], sec["a1"], asp)
+
+    total = float(Hc * Wc)
+    target = float(spec.get("accent_target", ACCENT_TARGET))
+    max_sym = float(spec.get("accent_max_symmetry", 0.85))
+    fmin, fmax = spec.get("accent_frac_range", (ACCENT_MIN, ACCENT_MAX))
+    inner = interior_ink(is_ink)
+    best = None
+    for thr in (0.5, 0.7, 0.85, 0.95):
+        cand = (f["line"] >= thr) & region & is_ink & inner & side
+        if cand.sum() == 0:
+            continue
+        lab, sizes = components(cand)
+        for cid in range(1, len(sizes)):
+            size = int(sizes[cid])
+            if size < ACCENT_MIN_BLOCK_CELLS:
+                continue
+            frac = size / total
+            if frac < fmin or frac > fmax:
+                continue
+            cells = [(int(x), int(y)) for y, x in np.argwhere(lab == cid)]
+            sym = region_symmetry(cells)
+            if max(sym) > max_sym:
+                continue
+            score = (0 if fmin <= frac <= fmax else 1, abs(frac - target))
+            if best is None or score < best[0]:
+                best = (score, lab == cid, frac, size, sym)
+    if best is None:
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    return best[1], best[2], best[3], best[4]
+
+
+def accent_from_interference(spec, params, is_ink, region):
+    """The accent is the CORE of the wide arc the outer interference ring is
+    drawn with.
+
+    The host is the field's own structure: the outer ring of the wave's node
+    set, drawn wide over a contiguous ARC of its own curve.  The accent is the
+    middle of that wide run — a curved band with ink on both sides, so it
+    cannot be a rectangle, a bar or a cross, and it can never float on paper.
+
+    Rules kept from the general accent rule:
+      * the accent only exists where the cell was ALREADY inked;
+      * it is embedded in the ink mass (interior cells), so it can never
+        float on paper;
+      * it is a MASS (>= 9 connected cells), never a hairline;
+      * it covers 0.5-5 % of the frame;
+      * it is NOT geometrically symmetric (see region_symmetry): a curved run
+        is not, a drawn rectangle is.
+    """
+    Wc, Hc = spec["cell_w"], spec["cell_h"]
+    field = tuple(spec["field_rect"])
+    f = interference_arc(Wc, Hc, field, params)
+    inner = interior_ink(is_ink)
+    cand = f["accent"] & inner & is_ink & region
+    if not cand.any():
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    lab, sizes = components(cand)
+    best = None
+    for cid in range(1, len(sizes)):
+        size = int(sizes[cid])
+        if size < ACCENT_MIN_BLOCK_CELLS:
+            continue
+        cells = [(int(x), int(y)) for y, x in np.argwhere(lab == cid)]
+        sym = region_symmetry(cells)
+        frac = size / float(Wc * Hc)
+        fmin, fmax = spec.get("accent_frac_range", (0.005, 0.05))
+        if frac < fmin or frac > fmax:
+            continue
+        max_sym = float(spec.get("accent_max_symmetry", 0.90))
+        if max(sym) > max_sym:
+            continue
+        score = (0 if fmin <= frac <= fmax else 1,
+                 abs(frac - float(spec.get("accent_target", ACCENT_TARGET))))
+        if best is None or score < best[0]:
+            best = (score, lab == cid, frac, size, sym)
+    if best is None:
+        return np.zeros((Hc, Wc), dtype=bool), 0.0, 0, (0.0, 0.0, 0.0)
+    return best[1], best[2], best[3], best[4]
+
+
+def accent_for(spec, params, col, is_ink, region):
+    """The accent of one composition, by its declared source."""
+    src = spec.get("accent_source")
+    if src == "interference_arc":
+        return accent_from_interference(spec, params, is_ink, region)
+    if src == "chladni_nodal":
+        return accent_from_nodal(spec, params, is_ink, region)
+    if src == "chladni_band":
+        return accent_from_band(spec, params, is_ink, region)
+    if src == "chladni_index":
+        return accent_from_index(spec, params, is_ink, region)
+    mask, frac, block = calibrate_accent(col, is_ink, region,
+                                         spec.get("accent_target", ACCENT_TARGET))
+    cells = [(int(x), int(y)) for y, x in np.argwhere(mask)]
+    return mask, frac, block, region_symmetry(cells)
+
+
 # --------------------------------------------------------------------------
 # Composition builder
 # --------------------------------------------------------------------------
@@ -630,17 +1207,31 @@ def motif_pass(spec, params):
     UVX, UVY = np.meshgrid((np.arange(Wc) + 0.5) / Wc, (np.arange(Hc) + 0.5) / Hc)
     motif = spec["motif"]
     if motif == "terrain":
-        p = dict(zoom=spec.get("zoom", 2.0), band=0.62, sigma=0.06, band_ink=1.0,
-                 band_lo=0.56, band_hi=0.68, stroke=2.0, stroke_hi=2.6)
+        # faithful transcription of shaders.md M==3 (see motif_terrain's docstring)
+        p = dict(zoom=spec.get("zoom", 1.4), band=0.62, sigma=0.02, band_ink=1.0,
+                 band_lo=0.60, band_hi=0.64, stroke=0.5, stroke_hi=1.2)
         p.update(params)
         return motif_terrain(UVX, UVY, asp, spec["t"], **p)
     if motif == "shader":
         p = dict(center_cx=0.72, solid=0.90)
         p.update(params)
         return motif_shader(UVX, UVY, asp, spec["t"], **p)
-    p = dict(col_w=0.030, ring_w=0.055)
+    if motif == "interference":
+        # the interference motif works in CELL space (the field's own aspect),
+        # so it takes the field rectangle rather than the uv grid
+        p = dict(field=tuple(spec["field_rect"]))
+        p.update(params)
+        return motif_interference(UVX, UVY, asp, spec["t"], Wc, Hc, **p)
+    p = dict(col_w=0.030, ring_w=0.055, cell_h=spec["cell_h"])
     p.update(params)
-    return motif_chladni(UVX, UVY, asp, spec["t"], **p)
+    ink, col = motif_chladni(UVX, UVY, asp, spec["t"], **p)
+    if spec.get("accent_source") == "chladni_index":
+        # the highlighted index contour: the plate's own nodal line, drawn
+        # wide and inked SOLID, so the accent can be carved out of it.
+        band = chladni_index_band(spec, params, spec["cell_w"], spec["cell_h"])
+        if band is not None:
+            ink = np.maximum(ink, band.astype(np.float64))
+    return ink, col
 
 
 def rect_mask(rects, Wc, Hc):
@@ -672,6 +1263,28 @@ def build(spec):
     region = (~qmask)
     target = spec.get("accent_target", ACCENT_TARGET)
 
+    # ---- D1 / P6: the field's edge is a Bayer DISSOLVE, never a straight cut
+    # The paper column ends at the quiet zone's right edge; beyond it the field
+    # is brought in through the SAME 8x8 Bayer threshold, with the threshold
+    # raised towards 1 over `edge_seam_cells` cells.  A cell of the band inks
+    # only where the motif is dense AND the Bayer threshold is low, so the
+    # paper->field junction is resolved cell by cell by the ordered matrix —
+    # never a straight vertical edge, never a blur.
+    band_cells = int(spec.get("edge_seam_cells", 0))
+    x_edge = rects[0][2]
+    # the field rectangle is the dark column right of the paper column: the
+    # motif is drawn in the field's OWN aspect, so it is measured from the
+    # real edge, not from a guessed constant.
+    if spec.get("motif") == "interference":
+        spec["field_rect"] = (int(x_edge), int(Wc), 0, int(Hc))
+    th_eff = th
+    if band_cells > 0:
+        off = np.zeros((Hc, Wc), dtype=np.float64)
+        for x in range(x_edge, min(x_edge + band_cells, Wc)):
+            u = (x - x_edge + 0.5) / float(band_cells)
+            off[:, x] = 1.0 - u
+        th_eff = th + off
+
     # the motif parameters are searched so the accent lands in the 1.5-4.5%
     # band of the frame as a solid mass (deterministic: same params -> same result)
     variants = spec.get("motif_variants") or [spec.get("motif_params", {})]
@@ -680,13 +1293,13 @@ def build(spec):
         ink, col = motif_pass(spec, params)
         ink = ink * (~qmask)
         col = col * (~qmask)
-        is_ink = ink > th
-        accent, frac, block = calibrate_accent(col, is_ink, region, target)
+        is_ink = ink > th_eff
+        accent, frac, block, acc_sym = accent_for(spec, params, col, is_ink, region)
         in_band = 0.015 <= frac <= 0.045
         score = (0 if in_band else 1, abs(frac - target))
         if best is None or score < best[0]:
-            best = (score, params, ink, col, is_ink, accent, frac, block)
-    _, chosen, ink, col, is_ink, accent, frac, block = best
+            best = (score, params, ink, col, is_ink, accent, frac, block, acc_sym)
+    _, chosen, ink, col, is_ink, accent, frac, block, acc_sym = best
     accent_frac = accent.sum() / float(accent.size)
 
     # sanity: inside the quiet zone the field must be pure paper
@@ -763,6 +1376,17 @@ def build(spec):
         "display_left_margin_em": DISPLAY_LEFT_MARGIN_EM,
         "display_max_overlap_cells": DISPLAY_MAX_OVERLAP_CELLS,
         "quiet_zones_cell_rects": [list(r) for r in rects],
+        "field_region": {
+            "axis": "x",
+            "cell_x0": x_edge, "cell_x1": Wc,
+            "cell_y0": 0, "cell_y1": Hc,
+            "edge_seam_cells": band_cells,
+            "edge_seam_rule": ("the paper column ends at cell_x0; over the next "
+                               "edge_seam_cells cells the 8x8 Bayer threshold is "
+                               "raised from 1 to 0, so the field is brought in "
+                               "cell by cell through the ordered matrix — the "
+                               "paper->field junction is never a straight edge"),
+        },
         "text_rects": text_rects,
         "quiet_zones": quiet_zones_px,
         "display_lines": display_lines,
@@ -770,9 +1394,16 @@ def build(spec):
         "display_max_size": max(disp_sizes),
         "accent_min_block_cells": ACCENT_MIN_BLOCK_CELLS,
         "accent_largest_block_cells": int(block),
+        "accent_source": spec.get("accent_source", "colour-mask threshold"),
         "accent_fraction": round(accent_frac, 5),
         "accent_fraction_pct": round(accent_frac * 100.0, 3),
         "accent_cells": int(accent.sum()),
+        "accent_symmetry": {
+            "sym180": round(float(acc_sym[0]), 4),
+            "mirror_h": round(float(acc_sym[1]), 4),
+            "mirror_v": round(float(acc_sym[2]), 4),
+            "max": round(float(max(acc_sym)), 4),
+        },
         "pixel_counts": {hexof(c): int(n) for c, n in zip(cols, counts)},
     }
     return manifest
@@ -784,34 +1415,53 @@ def build(spec):
 def make_specs():
     specs = []
 
-    # ---- 1. A4 portrait, terrain motif, SOP blue -----------------------
+    # ---- 1. A4 portrait, LARGE-FORM interference rings, SOP blue ---------
+    # F2: the chladni plate was wrong for this composition — at A4 scale its
+    # nodal bands degenerate into wide solid slabs (mean ink stroke 12.14
+    # cells, limit 6.0).  The poster now carries the shader's INTERFERENCE
+    # motif: the NODAL SET of the shader's radial wave, drawn as thin
+    # strokes.  Interference rings are inherently large-form (big closed
+    # rings) and thin-stroked — exactly what A4 needs.
+    #
+    # ARITHMETIC, not a search.  The field column is 655 cells wide; the
+    # wave's phase is pi*rings*u (u = normalised elliptical radius), so
+    # across the width u runs 1 -> 0 -> 1 and the phase advances `rings` full
+    # periods.  rings = 5 => five periods across 655 cells, one period per
+    # 131 cells, and the node set is five nested closed rings at
+    # u = 0.2, 0.4, 0.6, 0.8, 1.0 of the outermost ring.
     Wc, Hc = 1240, 1754
     g = Grid(Wc)
     specs.append({
         "file": "poster_a4.png", "cell_w": Wc, "cell_h": Hc, "upscale": 2,
-        "family": "sop", "motif": "terrain", "t": 6.0,
+        "family": "sop", "motif": "interference", "t": 6.0,
         "col_x": g.x(0), "col_w": 620,
         "type_blocks": [
             {"kind": "display", "lines": ["HOU2", "TOUCH"], "y": int(0.09 * Hc),
              "w": 620, "max_size": int(0.16 * Hc)},
             {"kind": "text", "text": "A one-bit field rendered in pure Python.",
              "y": int(0.80 * Hc), "w": 380},
-            {"kind": "mono", "text": "COURSE 207 / SOP / TERRAIN / 1-BIT",
+            {"kind": "mono", "text": "COURSE 207 / SOP / RINGS / 1-BIT",
              "y": int(0.87 * Hc), "w": 440, "track": 0.07},
         ],
-        "accent_target": 0.030,
+        "accent_target": 0.010,
+        # D1/P6: the paper column ends in a Bayer dissolve, never a straight cut
+        "edge_seam_cells": 16,
+        # F2: the accent is carved OUT of the field's own structure — the CORE
+        # of a contiguous ARC of the outer ring, which the motif draws wide.
+        # An arc of a curve cannot be a rectangle, a bar or a cross, and the
+        # core has ink on both sides, so it can never float on paper.
+        "accent_source": "interference_arc",
+        "accent_max_symmetry": 0.90,
+        "accent_frac_range": (0.005, 0.05),
+        # ONE principled parameter set (no sweep): five rings; the inner ones
+        # are 2-cell strokes, the outer one is drawn 32 cells wide over a
+        # 70-degree arc of its own curve, of which the middle 24 cells become
+        # the accent.  The arc sits on the upper-right of the ring, clear of
+        # both the page edge and the ring's own symmetry axes.
         "motif_variants": [
-            {"zoom": 1.6, "sigma": 0.15, "band_lo": 0.52, "band_hi": 0.72},
-            {"zoom": 1.6, "sigma": 0.30, "band_lo": 0.52, "band_hi": 0.72},
-            {"zoom": 2.0, "sigma": 0.15, "band_lo": 0.52, "band_hi": 0.72},
-            {"zoom": 2.0, "sigma": 0.30, "band_lo": 0.52, "band_hi": 0.72},
-            {"zoom": 2.4, "sigma": 0.15, "band_lo": 0.52, "band_hi": 0.72},
-            {"zoom": 1.6, "sigma": 0.15, "band_lo": 0.52, "band_hi": 0.72,
-             "stroke": 3.2, "stroke_hi": 4.0},
-            {"zoom": 2.0, "sigma": 0.15, "band_lo": 0.52, "band_hi": 0.72,
-             "stroke": 3.2, "stroke_hi": 4.0},
-            {"zoom": 1.6, "sigma": 0.15, "band_lo": 0.52, "band_hi": 0.72,
-             "stroke": 4.2, "stroke_hi": 5.2},
+            {"rings": 5, "hw_thin": 1.0, "hw_host": 16.0, "accent_half": 12.0,
+             "accent_t0": -80.0, "accent_t1": -15.0, "taper_deg": 4.0,
+             "cx_frac": 0.5, "ax_frac": 0.5, "margin_x": 8.0, "margin_y": 40.0},
         ],
     })
 
@@ -832,6 +1482,7 @@ def make_specs():
              "y": int(0.78 * Hc), "w": 340, "track": 0.07},
         ],
         "accent_target": 0.030,
+        "edge_seam_cells": 16,
         "motif_variants": [
             {"center_cx": 0.68, "solid": 0.90},
             {"center_cx": 0.74, "solid": 0.90},
@@ -855,6 +1506,19 @@ def make_specs():
              "y": int(0.75 * Hc), "w": 260, "track": 0.07},
         ],
         "accent_target": 0.030,
+        "edge_seam_cells": 16,
+        # D3: the accent is carved out of the plate's OWN nodal bands, on one
+        # side of the plate axis — a region of the field's structure, never a
+        # drawn shape (and therefore never a symmetric cross).
+        "accent_source": "chladni_nodal",
+        "accent_split_cells": 8,
+        # F2: the nodal band runs the full height of the plate, so the carve
+        # was mirror-symmetric about its own bounding box (mirror-H 99.9 %).
+        # Clipping the carve to a SECTOR of the plate turns it into a curved
+        # run: a piece of the field's structure, not a symmetric bar.
+        "accent_sector": {"cx_uv": 0.66, "cy_uv": 0.50,
+                          "r0": 60, "r1": 460, "a0": -95, "a1": 40},
+        "accent_max_symmetry": 0.80,
         "motif_variants": [
             {"col_w": 0.030, "ring_w": 0.06},
             {"col_w": 0.050, "ring_w": 0.10},
@@ -994,19 +1658,51 @@ def build_seam(spec):
     smask, fracs = seam_mask(Wc, Hc, 0, band_top, cell, rows, spec["scroll"])
     out[smask] = np.array(INK, dtype=np.uint8)             # seam band: full width
 
-    # ONE accent: a ladder of thin rules inside the dark region, one rule per
-    # band row, continuing the seam's row rhythm below the band.  Not a floating
-    # block — it reads as a measurement scale, which is what the seam is.
+    # ONE accent: a ladder of thin rules inside the dark region.  The rules are
+    # NOT evenly pitched: rule k is placed at a y offset proportional to the
+    # CUMULATIVE ink of the seam up to band row k, so the ladder's spacing
+    # encodes the seam's own density curve (tight where the seam is still
+    # paper, wide where the seam is already dense).  An even pitch reads as a
+    # barcode; this reads as a measurement scale.
     ax0 = spec["accent_x_cell"]
     aw = spec["accent_w_cell"]
     ah = spec["accent_h_cells"]
-    accent_cells = 0
+    fr = np.asarray(fracs, dtype=np.float64)
+    total = float(fr.sum())
+    cum = (np.cumsum(fr) / total) if total > 0 else np.zeros_like(fr)
+    span = int(spec["accent_span_cells"])
+    base = dark_top + int(spec["accent_top_offset_cells"])
+    offsets = []
+    prev = None
     for k in range(spec["accent_rules"]):
-        ay0 = dark_top + spec["accent_top_offset_cells"] + k * spec["accent_pitch_cells"]
-        if ax0 + aw > Wc or ay0 + ah > Hc:
+        ay0 = base + int(round(cum[k] * span))
+        if prev is not None and ay0 < prev + ah:
+            ay0 = prev + ah          # rules never overlap
+        offsets.append(ay0)
+        prev = ay0
+    # F2: the rules' WIDTHS follow the seam's own density curve, so the ladder
+    # is a STAIRCASE and not a stack of identical rectangles.  A stack of
+    # equal rectangles is 100 % symmetric under 180 deg and both mirrors; the
+    # staircase is not.  Rule k is as wide as the band's own cumulative ink
+    # demands, which is what the pitch already encodes.
+    # F2: the rules are SLOPED bars, not rectangles: each row of a rule is one
+    # cell shorter than the row above, so the rule reads as a sloped tick and
+    # is not self-similar under 180 deg or either mirror.  A perfect rectangle
+    # would score 100 % on all three transforms.
+    accent_cells = 0
+    rule_widths = []
+    for k, ay0 in enumerate(offsets):
+        wk = int(round(aw * (0.28 + 0.72 * float(fr[k]))))
+        wk = max(4, min(aw, wk))
+        if ax0 + wk > Wc or ay0 + ah > Hc:
             raise RuntimeError("accent ladder does not fit inside the dark region")
-        out[ay0:ay0 + ah, ax0:ax0 + aw] = np.array(FAMILY[spec["family"]], dtype=np.uint8)
-        accent_cells += ah * aw
+        for j in range(ah):
+            wj = wk - j
+            if wj <= 0:
+                continue
+            out[ay0 + j, ax0:ax0 + wj] = np.array(FAMILY[spec["family"]], dtype=np.uint8)
+            accent_cells += wj
+        rule_widths.append(wk)
 
     out[tmask] = np.array(INK, dtype=np.uint8)                  # type is pure ink
 
@@ -1066,6 +1762,17 @@ def build_seam(spec):
         "display_left_margin_em": DISPLAY_LEFT_MARGIN_EM,
         "display_max_overlap_cells": DISPLAY_MAX_OVERLAP_CELLS,
         "quiet_zones_cell_rects": [list(r) for r in rects],
+        "field_region": {
+            "axis": "y",
+            "junction": "bayer_seam_band",
+            "cell_x0": qedge, "cell_x1": Wc,
+            "cell_y0": band_top, "cell_y1": Hc,
+            "edge_seam_cells": 0,
+            "edge_seam_rule": ("the paper/field junction of this composition is "
+                               "horizontal and IS the §12 pixel seam: a 12-row "
+                               "Bayer band, so the transition is resolved by the "
+                               "ordered matrix row by row, not by a straight cut"),
+        },
         "text_rects": text_rects,
         "quiet_zones": quiet_zones_px,
         "display_lines": display_lines,
@@ -1130,10 +1837,27 @@ def build_seam(spec):
                 "rules": int(spec["accent_rules"]),
                 "rule_height_px": ah * up,
                 "rule_width_px": aw * up,
-                "pitch_px": spec["accent_pitch_cells"] * up,
+                "pitch_px": (float(np.mean(np.diff(offsets))) * up
+                             if len(offsets) > 1 else 0.0),
                 "first_rule_y": (dark_top + spec["accent_top_offset_cells"]) * up,
-                "note": ("one rule per band row, continuing the seam's row rhythm below "
-                         "the band; reads as a measurement scale, not a floating block"),
+                "rule_y_cells": [int(y) for y in offsets],
+                "rule_widths_cells": [int(w) for w in rule_widths],
+                "rule_shape": ("each rule is a SLOPED bar (each row one cell "
+                               "shorter than the row above), so no accent "
+                               "region is a rectangle"),
+                "rule_width_note": ("each rule is as wide as the band's own ink "
+                                     "fraction at that row, so the ladder is a "
+                                     "staircase (never a stack of rectangles)"),
+                "rule_y_px": [int(y) * up for y in offsets],
+                "rule_pitch_cells": [int(offsets[i + 1] - offsets[i])
+                                     for i in range(len(offsets) - 1)],
+                "cumulative_ink": [round(float(c), 6) for c in cum],
+                "span_cells": span,
+                "note": ("the rule offsets are proportional to the CUMULATIVE ink "
+                         "of the seam (see ink_fraction_per_row), so the ladder's "
+                         "pitch encodes the seam's density curve: tight where the "
+                         "seam is still paper, wide where it is already dense. "
+                         "An even pitch reads as a barcode."),
             },
         },
     }
@@ -1169,7 +1893,7 @@ def make_seam_spec():
         "accent_x_cell": int(round(g.x(0))),
         "accent_w_cell": 273,
         "accent_h_cells": 6,
-        "accent_pitch_cells": SEAM_CELL_RENDER,
+        "accent_span_cells": 330,
         "accent_rules": SEAM_ROWS,
         "accent_top_offset_cells": SEAM_CELL_RENDER,
     }
