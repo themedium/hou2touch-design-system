@@ -229,8 +229,10 @@ decision breaks the system.
 Run both gates and quote their output in your report:
 
 ```bash
-node tools/verify_docs.mjs              # → GATE_PASS   (docs canon, 36 checks)
-node references/renders/verify_render.mjs # → GATE_PASS  (4 renders)
+node tools/verify_docs.mjs                 # → GATE_PASS  (docs canon, 42 checks)
+node references/renders/verify_render.mjs  # → GATE_PASS  (4 canon renders, 15 gates)
+node references/renders/photo_field_verify.mjs  # → GATE_PASS  (photographic path)
+node references/renders/parity_hero_verify.mjs  # → GATE_PASS  (hero parity vs GPU)
 ```
 
 Then state explicitly:
@@ -259,10 +261,101 @@ Stated plainly, because an agent that does not know these will over-promise:
 * **Blender and After Effects portability is principles-only.** No resolutions,
   no fps, no export settings, no codec — translate the *rules*, then decide the
   technical settings yourself.
-* **The renders in `references/renders/` were produced by a Python
-  re-implementation and have never been compared to the live site side by
-  side.** They are evidence of the rules, not photographs of the site.
+* **The renders in `references/renders/` HAVE been compared to the live site**
+  (2026-11-23, see `references/renders/NOTES.md`). Two results, both load-bearing:
+  * **The seam matches exactly.** The live canvas at 1377 px viewport is 173×12
+    at CSS 96 px; solving the scroll offset in 1/32 steps reproduced all 12 rows
+    with error 0 at `s = 2/32`. The canonical renders use `s = 0` because §12
+    requires a static state for print.
+  * **The hero does not match in kind, and cannot.** The site's hero samples a
+    photograph and is **not 1-bit**: 795 unique colours, exact `#e9e7e0` on
+    0.09 % of pixels, exact `#0b0b0c` on 0.00 % (the darkest value ever written
+    is `#16191f`), plus 4.5 % orange. The canonical 1-bit system and the live
+    hero are **two different aesthetic objects**. Both are reproducible:
+    `parity_hero_1439x739.png` reproduces the site (MAE 4.02 per channel, 94.7 %
+    of pixels within 12); the four canon renders reproduce the system.
 
 And the deepest limit of all: this system was extracted from one site, by
 agents, in the absence of a designer-of-record. Where it is silent, the site
 is the tiebreaker — and where the site is silent too, ask.
+
+---
+
+## 8. If you are producing a render
+
+Everything above is about reading. This section is about making, and it exists
+because every trap below was hit for real while building `references/renders/`.
+
+### 8.1 A passing gate is not a good picture
+The verifier checks tone count, upscale integrity, accent coverage, quiet zones,
+seam fidelity. It does **not** judge composition. Four renders passed every gate
+while being visually wrong in ways only the eye caught:
+
+| Symptom | What it looked like | Root cause |
+|---|---|---|
+| straight vertical field edge | a paper column butted against the field | the field was cut, not dissolved — violates P6 |
+| symmetric accent | a literal cross, or a perfect bar | the accent was *drawn*, not *carved from the field* |
+| slab instead of contour | rectangular blocks with right angles | motif produced wide solid bands, not thin lines |
+| barcode ladder | 12 evenly pitched rules | pitch ignored the density it was meant to encode |
+
+**Always look at the output.** Open the PNG. If you cannot describe the
+composition in one sentence, it is not finished.
+
+### 8.2 The gates that catch these (and why they exist)
+`verify_render.mjs` now enforces, in addition to the tonal rules:
+
+1. **No straight field edge** — fails if one x-index is the paper→field
+   transition on >25 % of rows spanning ≥30 % of the height. The fix is a
+   **Bayer dissolve**: raise the threshold 1→0 over ~16 cells so the field
+   enters cell by cell through the ordered matrix.
+2. **Large form** — at least one connected ink region ≥2000 cells. A field that
+   dissolves into speckle is not a composition.
+3. **Accent symmetry, no aspect loophole** — fails at ≥95 % self-similarity
+   under 180° rotation or either mirror, *regardless of bbox shape*. A long thin
+   symmetric bar is as geometric as a cross.
+4. **Seam is proved, not asserted** — within the seam band, the first-ink row
+   index per column must have std-dev ≥1 cell. A real Bayer ramp varies
+   (measured 20.9); a straight cut would be constant.
+
+### 8.3 Choose the motif by form, not by subject
+Motif choice is a **composition** decision. The catalogue maps motifs to courses;
+it does not tell you which survives at your size.
+
+| Motif | Gives | Use it when |
+|---|---|---|
+| `shader` (interference) | large closed rings, thin stroke | A4 poster, hero-scale surfaces — anything needing one big form |
+| `chladni` | large lobes, or nodal bands | square/vertical formats; accent can follow a nodal line |
+| `terrain` | many small closed contours | small carriers only — at A4 it reads as broken blocks |
+| photographic halftone | printed-photograph feel | when the surface must feel like a print, not a diagram |
+
+A4 poster built on `terrain` failed twice — first as CRT scanlines, then as
+rectangular blocks — before the motif was replaced with interference. **Fixing
+the transcription was not the fix; changing the motif was.**
+
+### 8.4 Never sweep parameters
+A previous attempt burned its entire budget across 16 tuning scripts and left
+the poster with **zero accent cells**. Pick one principled value by arithmetic,
+render once, read the printed numbers, adjust by reasoning. If three attempts
+fail, report with numbers instead of brute-forcing.
+
+Example of arithmetic that worked: field 655 cells wide ÷ 5 rings = 131 cells
+per period → nodal lines ~64 cells apart.
+
+### 8.5 Colour space: the reference is Display-P3
+Screenshots and canvas captures of the site store **Display-P3** bytes, not
+sRGB. Verified arithmetically: P3→sRGB of the reference returns the shader's own
+constants `PAP=(.914,.906,.878)` and `mix(PAP,ORG,.9)` exactly.
+
+Consequence: if you sample a colour from a site screenshot with an sRGB tool you
+will get the wrong number. Convert before comparing, and apply the same encode
+when reproducing the hero.
+
+### 8.6 Capturing the site as a reference
+The local dev server (`127.0.0.1:8898`) and GitHub Pages both served the hero
+canvas uninitialised (300×150) because the page's hero block runs on a timer
+that a background tab throttles. What worked instead: **execute the site's own
+fragment shader** in a fresh canvas, with uniforms read from the page
+(`C = max(3, round(H/170))`, `P = .6`, `B` = bottom of the facts row + 12).
+
+Do not fake a reference by screenshotting a fallback state. Verify the canvas is
+at its real size (`canvas.width` equals `clientWidth`) before trusting it.
