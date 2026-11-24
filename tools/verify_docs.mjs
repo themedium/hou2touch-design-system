@@ -234,6 +234,41 @@ if (!notes.includes('s = 2/32') || !/exact match/i.test(notes)) {
   fails.push('references/renders/NOTES.md does not record the live comparison (s = 2/32 / exact match)');
 }
 
+// 43 — the operating brief exists and states the source hierarchy
+const briefing = read('BRIEFING.md');
+if (!briefing) {
+  fails.push('BRIEFING.md is missing');
+} else {
+  if (!/сайт\s*[—-]\s*главный источник дизайн-элементов/i.test(briefing)) {
+    fails.push('BRIEFING.md does not state that the site is the primary source for design elements');
+  }
+  // the five-step collection protocol
+  for (const step of ['Шаг 1', 'Шаг 2', 'Шаг 3', 'Шаг 4', 'Шаг 5']) {
+    if (!briefing.includes(step)) fails.push(`BRIEFING.md is missing ${step} of the collection protocol`);
+  }
+  // the location inventory must be present and concrete
+  if (!briefing.includes('en/index.html:61')) {
+    fails.push('BRIEFING.md has no concrete token locations (expected en/index.html:61)');
+  }
+  // the hard prohibitions
+  if (!/Не менять сайт/i.test(briefing)) {
+    fails.push('BRIEFING.md does not forbid changing the site');
+  }
+  if (!/Display-P3/.test(briefing)) {
+    fails.push('BRIEFING.md does not warn about the Display-P3 reference colour space');
+  }
+  // the gate-is-not-the-eye rule
+  if (!/открыть PNG/i.test(briefing)) {
+    fails.push('BRIEFING.md does not require looking at the render, not just the gate');
+  }
+}
+
+// 44 — README points at the brief
+const readme = read('README.md');
+if (!readme || !readme.includes('BRIEFING.md')) {
+  fails.push('README.md does not link BRIEFING.md');
+}
+
 if (fails.length) {
   console.log(`GATE_FAIL: ${fails.length} check(s) failed`);
   for (const f of fails) console.log(`  - ${f}`);
